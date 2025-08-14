@@ -442,7 +442,7 @@ Check_Download()
     Echo_Blue "[+] Downloading files..."
     cd ${cur_dir}/src
     # Use official GNU FTP for libiconv
-    Download_Files https://ftp.gnu.org/pub/gnu/libiconv/${Libiconv_Ver}.tar.gz ${Libiconv_Ver}.tar.gz
+    Download_Files https://ftp.wayne.edu/gnu/libiconv/${Libiconv_Ver}.tar.gz ${Libiconv_Ver}.tar.gz
     # Use GitHub mirror for libmcrypt from winlibs
     Download_Files https://github.com/winlibs/libmcrypt/archive/refs/heads/master.tar.gz ${LibMcrypt_Ver}.tar.gz
     if [ $? -ne 0 ]; then
