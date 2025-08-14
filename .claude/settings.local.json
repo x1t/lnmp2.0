@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(awk:*)",
+      "Bash(sed:*)",
+      "Bash(chmod:*)",
+      "Bash(./fix_dependencies.sh)",
+      "Bash(wget:*)",
+      "Bash(rm:*)",
+      "WebFetch(domain:dev.mysql.com)",
+      "Bash(/usr/local/nginx/sbin/nginx:*)",
+      "WebFetch(domain:mirror.math.princeton.edu)",
+      "WebFetch(domain:mirror.chpc.utah.edu)",
+      "WebFetch(domain:mirrors.mit.edu)",
+      "WebFetch(domain:ftp.cs.stanford.edu)",
+      "WebFetch(domain:mirror.umd.edu)",
+      "Bash(time wget:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
