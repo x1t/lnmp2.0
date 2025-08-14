@@ -433,7 +433,21 @@ Deb_Dependent()
     apt-get -fy install
     export DEBIAN_FRONTEND=noninteractive
     apt-get --no-install-recommends install -y build-essential gcc g++ make
-    for packages in debian-keyring debian-archive-keyring build-essential gcc g++ make cmake autoconf automake re2c wget cron bzip2 libzip-dev libc6-dev bison file rcconf flex bison m4 gawk less cpp binutils diffutils unzip tar bzip2 libbz2-dev libncurses5 libncurses5-dev libtool libevent-dev openssl libssl-dev zlibc libsasl2-dev libltdl3-dev libltdl-dev zlib1g zlib1g-dev libbz2-1.0 libbz2-dev libglib2.0-0 libglib2.0-dev libpng3 libjpeg-dev libpng-dev libpng12-0 libpng12-dev libkrb5-dev curl libcurl3-gnutls libcurl4-gnutls-dev libcurl4-openssl-dev libpcre3-dev libpq-dev libpq5 gettext libpng12-dev libxml2-dev libcap-dev ca-certificates libc-client2007e-dev psmisc patch git libc-ares-dev libicu-dev e2fsprogs libxslt1.1 libxslt1-dev libc-client-dev xz-utils libexpat1-dev libaio-dev libtirpc-dev libsqlite3-dev libonig-dev lsof pkg-config libtinfo-dev libnuma-dev libwebp-dev gnutls-dev iproute2 xz-utils gzip libpcre2-dev libtool-bin libreadline-dev libfcgi-dev libfreetype6-dev libgd-dev libpspell-dev;
+    # Check for Debian 13 Trixie and adjust package names
+    if [ "${DISTRO}" = "Debian" ] && echo "${Debian_Version}" | grep -Eqi "^13"; then
+        # Debian 13 Trixie package adjustments
+        echo "Detected Debian 13 Trixie, adjusting package names..."
+        libaio_pkg="libaio1t64"
+        libncurses_pkg="libncurses6 libncurses-dev"
+        libtinfo_pkg="libtinfo6"
+    else
+        # Traditional package names for older Debian versions
+        libaio_pkg="libaio-dev"
+        libncurses_pkg="libncurses5 libncurses5-dev"
+        libtinfo_pkg="libtinfo-dev"
+    fi
+    
+    for packages in debian-keyring debian-archive-keyring build-essential gcc g++ make cmake autoconf automake re2c wget cron bzip2 libzip-dev libc6-dev bison file rcconf flex bison m4 gawk less cpp binutils diffutils unzip tar bzip2 libbz2-dev ${libncurses_pkg} libtool libevent-dev openssl libssl-dev zlibc libsasl2-dev libltdl3-dev libltdl-dev zlib1g zlib1g-dev libbz2-1.0 libbz2-dev libglib2.0-0 libglib2.0-dev libpng3 libjpeg-dev libpng-dev libpng12-0 libpng12-dev libkrb5-dev curl libcurl3-gnutls libcurl4-gnutls-dev libcurl4-openssl-dev libpcre3-dev libpq-dev libpq5 gettext libpng12-dev libxml2-dev libcap-dev ca-certificates libc-client2007e-dev psmisc patch git libc-ares-dev libicu-dev e2fsprogs libxslt1.1 libxslt1-dev libc-client-dev xz-utils libexpat1-dev ${libaio_pkg} libtirpc-dev libsqlite3-dev libonig-dev lsof pkg-config ${libtinfo_pkg} libnuma-dev libwebp-dev gnutls-dev iproute2 xz-utils gzip libpcre2-dev libtool-bin libreadline-dev libfcgi-dev libfreetype6-dev libgd-dev libpspell-dev;
     do apt-get --no-install-recommends install -y $packages; done
 }
 

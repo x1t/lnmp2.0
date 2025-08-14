@@ -128,7 +128,18 @@ DB_Dependent()
         dpkg -l |grep mysql
         dpkg -P mysql-server mysql-common libmysqlclient15off libmysqlclient15-dev
         dpkg -P mariadb-client mariadb-server mariadb-common
-        for packages in debian-keyring debian-archive-keyring build-essential gcc g++ make cmake autoconf automake wget openssl libssl-dev zlib1g zlib1g-dev libncurses5 libncurses5-dev bison libaio-dev libtirpc-dev libsasl2-dev pkg-config libpcre2-dev libxml2-dev libtinfo-dev libnuma-dev gnutls-dev xz-utils gzip;
+        # Check for Debian 13 Trixie and adjust package names
+        if [ "${DISTRO}" = "Debian" ] && echo "${Debian_Version}" | grep -Eqi "^13"; then
+            libaio_pkg="libaio1t64"
+            libncurses_pkg="libncurses6 libncurses-dev"
+            libtinfo_pkg="libtinfo6"
+        else
+            libaio_pkg="libaio-dev"
+            libncurses_pkg="libncurses5 libncurses5-dev"
+            libtinfo_pkg="libtinfo-dev"
+        fi
+        
+        for packages in debian-keyring debian-archive-keyring build-essential gcc g++ make cmake autoconf automake wget openssl libssl-dev zlib1g zlib1g-dev ${libncurses_pkg} bison ${libaio_pkg} libtirpc-dev libsasl2-dev pkg-config libpcre2-dev libxml2-dev ${libtinfo_pkg} libnuma-dev gnutls-dev xz-utils gzip;
         do apt-get --no-install-recommends install -y $packages; done
     fi
 }

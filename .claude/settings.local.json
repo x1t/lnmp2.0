@@ -16,7 +16,8 @@
       "WebFetch(domain:ftp.cs.stanford.edu)",
       "WebFetch(domain:mirror.umd.edu)",
       "Bash(time wget:*)",
-      "WebFetch(domain:mirror.uoregon.edu)"
+      "WebFetch(domain:mirror.uoregon.edu)",
+      "WebFetch(domain:packages.debian.org)"
     ],
     "deny": [],
     "ask": []

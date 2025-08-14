@@ -17,6 +17,33 @@ MySQL_Gcc7_Patch()
     fi
 }
 
+Check_MySQL_Dependencies()
+{
+    Echo_Blue "[+] Checking MySQL runtime dependencies for Debian 13..."
+    
+    # Check for Debian 13 Trixie specific issues
+    if [ "${DISTRO}" = "Debian" ] && echo "${Debian_Version}" | grep -Eqi "^13"; then
+        echo "Detected Debian 13 Trixie, checking MySQL dependencies..."
+        
+        # Check if libaio1t64 is available, create compatibility links if needed
+        if [ ! -f /lib/x86_64-linux-gnu/libaio.so.1 ] && [ -f /lib/x86_64-linux-gnu/libaio.so.1t64 ]; then
+            echo "Creating libaio compatibility symlinks for MySQL..."
+            ln -sf /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
+        fi
+        
+        # Check if libncurses5 compatibility is needed
+        if [ ! -f /lib/x86_64-linux-gnu/libncurses.so.5 ] && [ -f /lib/x86_64-linux-gnu/libncurses.so.6 ]; then
+            echo "Creating libncurses compatibility symlinks for MySQL client..."
+            ln -sf /lib/x86_64-linux-gnu/libncurses.so.6 /lib/x86_64-linux-gnu/libncurses.so.5
+            ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfo.so.5
+        fi
+        
+        # Update library cache
+        ldconfig
+        echo "MySQL dependency compatibility links created for Debian 13."
+    fi
+}
+
 MySQL_Sec_Setting()
 {
     if [ -d "/proc/vz" ]; then
@@ -26,6 +53,9 @@ MySQL_Sec_Setting()
     if [ -d "/etc/mysql" ]; then
         mv /etc/mysql /etc/mysql.backup.$(date +%Y%m%d)
     fi
+
+    # Check and fix MySQL dependencies before starting
+    Check_MySQL_Dependencies
 
     if command -v systemctl >/dev/null 2>&1; then
         systemctl enable mysql.service
