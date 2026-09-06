@@ -36,6 +36,10 @@ elif [ "${DBSelect}" = "4" ]; then
     Mysql_Ver='mysql-5.7.42'
 elif [ "${DBSelect}" = "5" ]; then
     Mysql_Ver='mysql-8.0.46'
+elif [ "${DBSelect}" = "11" ]; then
+    Mysql_Ver='mysql-8.4.11'
+elif [ "${DBSelect}" = "12" ]; then
+    Mysql_Ver='mysql-9.7.2'
 elif [ "${DBSelect}" = "6" ]; then
     Mariadb_Ver='mariadb-5.5.68'
 elif [ "${DBSelect}" = "7" ]; then
@@ -85,22 +89,5 @@ fi
 
 Pureftpd_Ver='pure-ftpd-1.0.49'
 
-XCache_Ver='xcache-3.2.0'
-ImageMagick_Ver='ImageMagick-7.1.1-8'
-Imagick_Ver='imagick-3.7.0'
-ZendOpcache_Ver='zendopcache-7.0.5'
 Redis_Stable_Ver='redis-7.0.11'
 PHPRedis_Ver='redis-5.3.7'
-Memcached_Ver='memcached-1.6.15'
-Libmemcached_Ver='libmemcached-1.0.18'
-PHPMemcached_Ver='memcached-2.2.0'
-PHP7Memcached_Ver='memcached-3.1.5'
-PHP8Memcached_Ver='memcached-3.2.0'
-PHPMemcache_Ver='memcache-3.0.8'
-PHP7Memcache_Ver='memcache-4.0.5.2'
-PHP8Memcache_Ver='memcache-8.2'
-PHPOldApcu_Ver='apcu-4.0.11'
-PHPNewApcu_Ver='apcu-5.1.22'
-PHPApcu_Bc_Ver='apcu_bc-1.0.5'
-PHPSodium_Ver='libsodium-2.0.23'
-PHPSwoole_Ver='swoole-5.0.3'

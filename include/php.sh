@@ -107,59 +107,6 @@ PHP_with_Bz2()
     fi
 }
 
-PHP_with_Sodium()
-{
-    if [ "${Enable_PHP_Sodium}" = "n" ]; then
-        with_sodium=''
-    else
-        if [ "$PM" = "yum" ]; then
-            if [ "${DISTRO}" = "Oracle" ]; then
-                yum -y install oracle-epel-release
-            else
-                yum -y install epel-release
-            fi
-            yum -y install libsodium-devel
-        elif [ "$PM" = "apt" ]; then
-            apt-get install -y libsodium-dev
-        fi
-        if echo "${PHPSelect}" | grep -Eqi "^[3-5]$|^[6-9]$|^10$" || echo "${php_version}" | grep -Eqi '^7.[2-4].*|8.*' || echo "${Php_Ver}" | grep -Eqi "php-7.[2-4].*|php-8.*"; then
-            with_sodium='--with-sodium'
-        else
-            Echo_Red 'Below PHP 7.2 please use " . /addons.sh install sodium " to install the PHP Sodium module.'
-        fi
-    fi
-}
-
-PHP_with_Imap()
-{
-    if [ "${Enable_PHP_Imap}" = "n" ]; then
-        with_imap=''
-    else
-        if [ "$PM" = "yum" ]; then
-            if [ "${DISTRO}" = "Oracle" ]; then
-                yum -y install oracle-epel-release
-            else
-                yum -y install epel-release
-            fi
-            yum -y install libc-client-devel krb5-devel uw-imap-devel
-            if echo "${CentOS_Version}" | grep -Eqi "^9" || echo "${Alma_Version}" | grep -Eqi "^9" || echo "${Rocky_Version}" | grep -Eqi "^9"; then
-                if ! rpm -qa | grep "libc-client-2007f" || ! rpm -qa | grep "uw-imap-devel"; then
-                    if [ "${CheckMirror}" = "n" ]; then
-                        rpm -ivh ${cur_dir}/src/libc-client-2007f-24.el9.${ARCH}.rpm ${cur_dir}/src/uw-imap-devel-2007f-24.el9.${ARCH}.rpm
-                    else
-                        rpm -ivh ${Download_Mirror}/lib/uw-imap/libc-client-2007f-24.el9.${ARCH}.rpm
-                        rpm -ivh ${Download_Mirror}/lib/uw-imap/uw-imap-devel-2007f-24.el9.${ARCH}.rpm
-                    fi
-                fi
-            fi
-            [[ -s /usr/lib64/libc-client.so ]] && ln -sf /usr/lib64/libc-client.so /usr/lib/libc-client.so
-        elif [ "$PM" = "apt" ]; then
-            apt-get install -y libc-client-dev libkrb5-dev
-        fi
-        with_imap='--with-imap --with-imap-ssl --with-kerberos'
-    fi
-}
-
 PHP_with_Intl()
 {
     if echo "${Ubuntu_Version}" | grep -Eqi "^19|2[0-7]\." || echo "${Debian_Version}" | grep -Eqi "^1[0-9]" || echo "${Raspbian_Version}" | grep -Eqi "^1[0-9]" || echo "${Deepin_Version}" | grep -Eqi "^2[0-9]" || echo "${UOS_Version}" | grep -Eqi "^2[0-9]" || echo "${Amazon_Version}" | grep -Eqi "^202[3-9]" || echo "${Kali_Version}" | grep -Eqi "^202[2-9]" || echo "${Fedora_Version}" | grep -Eqi "^3[7-9]|4[0-9]" || echo "${openEuler_Version}" | grep -Eqi "^2[2-9]" || echo "${Mint_Version}" | grep -Eqi "^2[0-9]" || echo "${Kylin_Version}" | grep -Eq "^v1[0-9]"; then
@@ -182,10 +129,8 @@ Check_PHP_Option()
     PHP_with_Exif
     PHP_with_Ldap
     PHP_with_Bz2
-    PHP_with_Sodium
-    PHP_with_Imap
     PHP_with_Intl
-    PHP_Buildin_Option="${with_exif} ${with_ldap} ${with_bz2} ${with_sodium} ${with_imap} ${with_icu_dir}"
+    PHP_Buildin_Option="${with_exif} ${with_ldap} ${with_bz2} ${with_icu_dir}"
 }
 
 Ln_PHP_Bin()
@@ -297,10 +242,6 @@ Install_PHP_7()
     Pear_Pecl_Set
     Install_Composer
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7.0..."
-    echo "unavailable now."
-
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
     cat >/usr/local/php/etc/php-fpm.conf<<EOF
@@ -368,10 +309,6 @@ Install_PHP_71()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7.1..."
-    echo "unavailable now."
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -441,10 +378,6 @@ Install_PHP_72()
     Pear_Pecl_Set
     Install_Composer
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7.2..."
-    echo "unavailable now."
-
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
     cat >/usr/local/php/etc/php-fpm.conf<<EOF
@@ -512,10 +445,6 @@ Install_PHP_73()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7.3..."
-    echo "unavailable now."
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -585,10 +514,6 @@ Install_PHP_74()
     Pear_Pecl_Set
     Install_Composer
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7.4..."
-    echo "unavailable now."
-
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
     cat >/usr/local/php/etc/php-fpm.conf<<EOF
@@ -657,10 +582,6 @@ Install_PHP_80()
     Pear_Pecl_Set
     Install_Composer
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8.0..."
-    echo "unavailable now."
-
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
     cat >/usr/local/php/etc/php-fpm.conf<<EOF
@@ -727,10 +648,6 @@ Install_PHP_81()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8.1..."
-    echo "unavailable now."
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -799,10 +716,6 @@ Install_PHP_82()
     Pear_Pecl_Set
     Install_Composer
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8.2..."
-    echo "unavailable now."
-
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
     cat >/usr/local/php/etc/php-fpm.conf<<EOF
@@ -869,10 +782,6 @@ Install_PHP_83()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8.3..."
-    echo "unavailable now."
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -945,9 +854,6 @@ Install_PHP_84()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Install_Composer || return 1
-
-    cd "${cur_dir}/src" || return 1
-    echo "ZendGuardLoader is not available for ${Php_Ver}."
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -1029,10 +935,6 @@ eof
     \cp "${cur_dir}/conf/index.html" "${Default_Website_Dir}/index.html" || return 1
     \cp "${cur_dir}/conf/lnmp.gif" "${Default_Website_Dir}/lnmp.gif" || return 1
 
-    if [ ${PHPSelect} -ge 1 ]; then
-        echo "Copy Opcache Control Panel..."
-        \cp "${cur_dir}/conf/ocp.php" "${Default_Website_Dir}/ocp.php" || return 1
-    fi
     echo "============================Install PHPMyAdmin================================="
     cd "${cur_dir}/src" || return 1
     if [ ! -s "${PhpMyAdmin_Ver}.tar.xz" ]; then

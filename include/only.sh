@@ -92,7 +92,7 @@ DB_Dependent()
         if [ "${DISTRO}" = "Oracle" ] && echo "${Oracle_Version}" | grep -Eqi "^9"; then
             Check_Codeready
             dnf --enablerepo=${repo_id} install libtirpc-devel -y
-            if [[ "${Bin}" != "y" && "${DBSelect}" = "5" ]]; then
+            if [[ "${Bin}" != "y" ]] && Is_Modern_MySQL_DB; then
                 dnf install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ gcc-toolset-12-binutils gcc-toolset-12-annobin-annocheck gcc-toolset-12-annobin-plugin-gcc -y
             fi
         fi
@@ -103,7 +103,7 @@ DB_Dependent()
 
         if echo "${CentOS_Version}" | grep -Eqi "^9" || echo "${Alma_Version}" | grep -Eqi "^9" || echo "${Rocky_Version}" | grep -Eqi "^9"; then
             dnf --enablerepo=crb install libtirpc-devel libxcrypt-compat -y
-            if [[ "${Bin}" != "y" && "${DBSelect}" = "5" ]]; then
+            if [[ "${Bin}" != "y" ]] && Is_Modern_MySQL_DB; then
                 dnf install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ gcc-toolset-12-binutils gcc-toolset-12-annobin-annocheck gcc-toolset-12-annobin-plugin-gcc -y
             fi
         fi
@@ -148,7 +148,7 @@ Install_Database()
 {
     echo "============================check files=================================="
     cd ${cur_dir}/src
-    if [[ "${DBSelect}" =~ ^[12345]$ ]]; then
+    if Is_MySQL_DB; then
         if [[ "${Bin}" = "y" && "${DBSelect}" =~ ^[2-4]$ ]]; then
             Mysql_Ver_Short=$(echo ${Mysql_Ver} | sed 's/mysql-//' | cut -d. -f1-2)
             Download_Files https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz
@@ -158,25 +158,27 @@ Install_Database()
                 sleep 5
                 exit 1
             fi
-        elif [[ "${Bin}" = "y" && "${DBSelect}" = "5" ]]; then
-            [[ "${DB_ARCH}" = "aarch64" ]] && mysql8_glibc_ver="2.17" || mysql8_glibc_ver="2.12"
-            [[ "${DB_ARCH}" = "aarch64" ]] && mysql8_ext="tar.gz" || mysql8_ext="tar.xz"
-            Download_Files https://cdn.mysql.com/Downloads/MySQL-8.0/${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext} ${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext}
-            [[ $? -ne 0 ]] && Download_Files https://cdn.mysql.com/archives/mysql-8.0/${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext} ${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext}
-            if [ ! -s ${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext} ]; then
-                Echo_Red "Error! Unable to download MySQL 8.0 Generic Binaries, please download it to src directory manually."
+        elif [[ "${Bin}" = "y" ]] && Is_Modern_MySQL_DB; then
+            Mysql_Ver_Short=$(echo ${Mysql_Ver} | sed 's/mysql-//' | cut -d. -f1-2)
+            mysql8_file=$(Get_MySQL_Binary_File "${Mysql_Ver}" "${DB_ARCH}") || return 1
+            if ! Download_Files "https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${mysql8_file}" "${mysql8_file}"; then
+                Download_Files "https://cdn.mysql.com/archives/mysql-${Mysql_Ver_Short}/${mysql8_file}" "${mysql8_file}" || return 1
+            fi
+            if [ ! -s "${mysql8_file}" ]; then
+                Echo_Red "Error! Unable to download MySQL ${Mysql_Ver_Short} Generic Binaries, please download it to src directory manually."
                 sleep 5
                 exit 1
             fi
         else
-            Download_Files ${Download_Mirror}/datebase/mysql/${Mysql_Ver}.tar.gz ${Mysql_Ver}.tar.gz
+            Mysql_Ver_Short=$(echo ${Mysql_Ver} | sed 's/mysql-//' | cut -d. -f1-2)
+            Download_Files "https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}.tar.gz" "${Mysql_Ver}.tar.gz"
             if [ ! -s ${Mysql_Ver}.tar.gz ]; then
                 Echo_Red "Error! Unable to download MySQL source code, please download it to src directory manually."
                 sleep 5
                 exit 1
             fi
         fi
-    elif [[ "${DBSelect}" =~ ^[6789]|10$ ]]; then
+    elif Is_MariaDB_DB; then
         Mariadb_Version=$(echo ${Mariadb_Ver} | cut -d- -f2)
         if [ "${Bin}" = "y" ]; then
             MariaDB_FileName="${Mariadb_Ver}-linux-systemd-${DB_ARCH}"
@@ -207,6 +209,10 @@ Install_Database()
         Install_MySQL_57
     elif [ "${DBSelect}" = "5" ]; then
         Install_MySQL_80
+    elif [ "${DBSelect}" = "11" ]; then
+        Install_MySQL_84
+    elif [ "${DBSelect}" = "12" ]; then
+        Install_MySQL_97
     elif [ "${DBSelect}" = "6" ]; then
         Install_MariaDB_5
     elif [ "${DBSelect}" = "7" ]; then
@@ -220,10 +226,10 @@ Install_Database()
     fi
     TempMycnf_Clean
 
-    if [[ "${DBSelect}" =~ ^[6789]|10$ ]]; then
+    if Is_MariaDB_DB; then
         StartUp mariadb
         StartOrStop start mariadb
-    elif [[ "${DBSelect}" =~ ^[12345]$ ]]; then
+    elif Is_MySQL_DB; then
         StartUp mysql
         StartOrStop start mysql
     fi
@@ -231,10 +237,10 @@ Install_Database()
     Clean_DB_Src_Dir
     Check_DB_Files
     if [[ "${isDB}" = "ok" ]]; then
-        if [[ "${DBSelect}" =~ ^[12345]$ ]]; then
+        if Is_MySQL_DB; then
             Echo_Green "MySQL root password: ${DB_Root_Password}"
             Echo_Green "Install ${Mysql_Ver} completed! enjoy it."
-        elif [[ "${DBSelect}" =~ ^[6789]|10$ ]]; then
+        elif Is_MariaDB_DB; then
             Echo_Green "MariaDB root password: ${DB_Root_Password}"
             Echo_Green "Install ${Mariadb_Ver} completed! enjoy it."
         fi

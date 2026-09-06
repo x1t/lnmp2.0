@@ -112,6 +112,10 @@ Init_Install()
         Install_MySQL_57 || return 1
     elif [ "${DBSelect}" = "5" ]; then
         Install_MySQL_80 || return 1
+    elif [ "${DBSelect}" = "11" ]; then
+        Install_MySQL_84 || return 1
+    elif [ "${DBSelect}" = "12" ]; then
+        Install_MySQL_97 || return 1
     elif [ "${DBSelect}" = "6" ]; then
         Install_MariaDB_5 || return 1
     elif [ "${DBSelect}" = "7" ]; then

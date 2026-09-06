@@ -353,7 +353,7 @@ CentOS_Dependent()
     fi
 
     Echo_Blue "[+] Yum installing dependent packages..."
-    for packages in make cmake gcc gcc-c++ gcc-g77 kernel-headers glibc-headers flex bison file libtool libtool-libs autoconf patch wget crontabs libjpeg libjpeg-devel libjpeg-turbo-devel libpng libpng-devel libpng10 libpng10-devel gd gd-devel libxml2 libxml2-devel zlib zlib-devel glib2 glib2-devel unzip tar bzip2 bzip2-devel libzip-devel libevent libevent-devel ncurses ncurses-devel curl curl-devel libcurl libcurl-devel e2fsprogs e2fsprogs-devel krb5 krb5-devel libidn libidn-devel openssl openssl-devel pcre-devel gettext gettext-devel ncurses-devel gmp-devel pspell-devel unzip libcap diffutils ca-certificates net-tools libc-client-devel psmisc libXpm-devel git-core c-ares-devel libicu-devel libxslt libxslt-devel xz expat-devel libaio-devel rpcgen libtirpc-devel perl cyrus-sasl-devel sqlite-devel oniguruma-devel lsof re2c pkg-config libarchive hostname ncurses-libs numactl-devel libxcrypt libwebp-devel gnutls-devel initscripts iproute libxcrypt-compat pcre2-devel automake libtool-ltdl-devel;
+    for packages in make cmake gcc gcc-c++ gcc-g77 kernel-headers glibc-headers flex bison file libtool libtool-libs autoconf patch wget crontabs libjpeg libjpeg-devel libjpeg-turbo-devel libpng libpng-devel libpng10 libpng10-devel gd gd-devel libxml2 libxml2-devel zlib zlib-devel glib2 glib2-devel unzip tar bzip2 bzip2-devel libzip-devel libevent libevent-devel ncurses ncurses-devel curl curl-devel libcurl libcurl-devel e2fsprogs e2fsprogs-devel krb5 krb5-devel libidn libidn-devel openssl openssl-devel pcre-devel gettext gettext-devel ncurses-devel gmp-devel pspell-devel unzip libcap diffutils ca-certificates net-tools psmisc libXpm-devel git-core c-ares-devel libicu-devel libxslt libxslt-devel xz expat-devel libaio-devel rpcgen libtirpc-devel perl cyrus-sasl-devel sqlite-devel oniguruma-devel lsof re2c pkg-config libarchive hostname ncurses-libs numactl-devel libxcrypt libwebp-devel gnutls-devel initscripts iproute libxcrypt-compat pcre2-devel automake libtool-ltdl-devel;
     do yum -y install $packages; done
 
     yum -y update nss
@@ -373,7 +373,7 @@ CentOS_Dependent()
     if echo "${CentOS_Version}" | grep -Eqi "^9" || echo "${Alma_Version}" | grep -Eqi "^9" || echo "${Rocky_Version}" | grep -Eqi "^9"; then
         for cs9packages in oniguruma-devel libzip-devel libtirpc-devel libxcrypt-compat;
         do dnf --enablerepo=crb install ${cs9packages} -y; done
-        if [[ "${Bin}" != "y" && "${DBSelect}" = "5" ]]; then
+        if [[ "${Bin}" != "y" ]] && Is_Modern_MySQL_DB; then
             dnf install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ gcc-toolset-12-binutils gcc-toolset-12-annobin-annocheck gcc-toolset-12-annobin-plugin-gcc -y
         fi
     fi
@@ -388,7 +388,7 @@ CentOS_Dependent()
     if [ "${DISTRO}" = "Oracle" ] && echo "${Oracle_Version}" | grep -Eqi "^9"; then
         Check_Codeready
         dnf --enablerepo=${repo_id} install libtirpc-devel -y
-        if [[ "${Bin}" != "y" && "${DBSelect}" = "5" ]]; then
+        if [[ "${Bin}" != "y" ]] && Is_Modern_MySQL_DB; then
             dnf install gcc-toolset-12-gcc gcc-toolset-12-gcc-c++ gcc-toolset-12-binutils gcc-toolset-12-annobin-annocheck gcc-toolset-12-annobin-plugin-gcc -y
         fi
     fi
@@ -479,23 +479,24 @@ Check_Download()
             Download_Files "https://nginx.org/download/${Nginx_Ver}.tar.gz" "${Nginx_Ver}.tar.gz" || return 1
         fi
     fi
-    if [[ "${DBSelect}" =~ ^[12345]$ ]]; then
+    if Is_MySQL_DB; then
         if [[ "${Bin}" = "y" && "${DBSelect}" =~ ^[2-4]$ ]]; then
             Mysql_Ver_Short=$(echo ${Mysql_Ver} | sed 's/mysql-//' | cut -d. -f1-2)
             Download_Files https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz
             if [ $? -ne 0 ]; then
                 Download_Files https://cdn.mysql.com/archives/mysql-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz
             fi
-        elif [[ "${Bin}" = "y" && "${DBSelect}" = "5" ]]; then
-            mysql8_glibc_ver="2.28"
-            mysql8_ext="tar.xz"
-            mysql8_file="${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext}"
-            Download_Files "https://cdn.mysql.com/Downloads/MySQL-8.0/${mysql8_file}" "${mysql8_file}" || return 1
+        elif [[ "${Bin}" = "y" ]] && Is_Modern_MySQL_DB; then
+            mysql8_file=$(Get_MySQL_Binary_File "${Mysql_Ver}" "${DB_ARCH}") || return 1
+            Mysql_Ver_Short=$(echo ${Mysql_Ver} | sed 's/mysql-//' | cut -d. -f1-2)
+            if ! Download_Files "https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${mysql8_file}" "${mysql8_file}"; then
+                Download_Files "https://cdn.mysql.com/archives/mysql-${Mysql_Ver_Short}/${mysql8_file}" "${mysql8_file}" || return 1
+            fi
         else
             Mysql_Ver_Short=$(echo ${Mysql_Ver} | sed 's/mysql-//' | cut -d. -f1-2)
             Download_Files "https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}.tar.gz" "${Mysql_Ver}.tar.gz" || return 1
         fi
-    elif [[ "${DBSelect}" =~ ^[6789]|10$ ]]; then
+    elif Is_MariaDB_DB; then
         Mariadb_Version=$(echo ${Mariadb_Ver} | cut -d- -f2)
         if [ "${Bin}" = "y" ]; then
             MariaDB_FileName="${Mariadb_Ver}-linux-systemd-${DB_ARCH}"
@@ -758,7 +759,7 @@ Download_Boost()
         [[ -d "${cur_dir}/src/${Boost_Ver}" ]] && rm -rf "${cur_dir}/src/${Boost_Ver}"
         Extract_Archive "${cur_dir}/src/${Boost_Ver}.tar.bz2" "${cur_dir}/src" || return 1
         MySQL_WITH_BOOST="-DWITH_BOOST=${cur_dir}/src/${Boost_Ver}"
-    elif [ "${DBSelect}" = "5" ] || echo "${mysql_version}" | grep -Eqi '^8.0.'; then
+    elif Is_Modern_MySQL_DB || Is_Modern_MySQL_Version; then
         Get_Boost_Ver=$(grep 'SET(BOOST_PACKAGE_NAME' cmake/boost.cmake |grep -oP '\d+(\_\d+){2}')
         local Boost_Package="boost_${Get_Boost_Ver}.tar.bz2"
         if ! Download_Files "https://mirrors.mit.edu/macports/distfiles/boost/${Boost_Package}" "${cur_dir}/src/${Boost_Package}"; then
@@ -775,15 +776,31 @@ Download_Boost()
 Install_Boost()
 {
     Echo_Blue "[+] Download or use exist boost..."
-    if [ "${DBSelect}" = "4" ] || [ "${DBSelect}" = "5" ]; then
-        if [ -d "${cur_dir}/src/${Mysql_Ver}/boost" ]; then
-            MySQL_WITH_BOOST="-DWITH_BOOST=${cur_dir}/src/${Mysql_Ver}/boost"
+    local mysql_source_dir="${cur_dir}/src/${Mysql_Ver:-mysql-${mysql_version}}"
+    local boost_version
+    if [ "${DBSelect}" = "4" ] || Is_Modern_MySQL_DB; then
+        if [ -d "${mysql_source_dir}/boost" ]; then
+            MySQL_WITH_BOOST="-DWITH_BOOST=${mysql_source_dir}/boost"
+        elif [ -d "${mysql_source_dir}/extra/boost" ]; then
+            boost_version=$(grep 'SET(BOOST_PACKAGE_NAME' "${mysql_source_dir}/cmake/boost.cmake" | grep -oP '\d+(\_\d+){2}')
+            if [ -d "${mysql_source_dir}/extra/boost/boost_${boost_version}" ]; then
+                MySQL_WITH_BOOST="-DWITH_BOOST=${mysql_source_dir}/extra/boost/boost_${boost_version}"
+            else
+                Download_Boost
+            fi
         else
             Download_Boost
         fi
-    elif echo "${mysql_version}" | grep -Eqi '^5.7.' || echo "${mysql_version}" | grep -Eqi '^8.0.'; then
-        if [ -d "${cur_dir}/src/mysql-${mysql_version}/boost" ]; then
-            MySQL_WITH_BOOST="-DWITH_BOOST=${cur_dir}/src/mysql-${mysql_version}/boost"
+    elif echo "${mysql_version}" | grep -Eqi '^5.7.' || Is_Modern_MySQL_Version; then
+        if [ -d "${mysql_source_dir}/boost" ]; then
+            MySQL_WITH_BOOST="-DWITH_BOOST=${mysql_source_dir}/boost"
+        elif [ -d "${mysql_source_dir}/extra/boost" ]; then
+            boost_version=$(grep 'SET(BOOST_PACKAGE_NAME' "${mysql_source_dir}/cmake/boost.cmake" | grep -oP '\d+(\_\d+){2}')
+            if [ -d "${mysql_source_dir}/extra/boost/boost_${boost_version}" ]; then
+                MySQL_WITH_BOOST="-DWITH_BOOST=${mysql_source_dir}/extra/boost/boost_${boost_version}"
+            else
+                Download_Boost
+            fi
         else
             Download_Boost
         fi

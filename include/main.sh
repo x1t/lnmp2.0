@@ -1,15 +1,96 @@
 #!/usr/bin/env bash
 
-DB_Info=('MySQL 5.1.73' 'MySQL 5.5.62' 'MySQL 5.6.51' 'MySQL 5.7.42' 'MySQL 8.0.46' 'MariaDB 5.5.68' 'MariaDB 10.4.29' 'MariaDB 10.5.20' 'MariaDB 10.6.13' 'MariaDB 10.11.3')
+DB_Info=('MySQL 5.1.73' 'MySQL 5.5.62' 'MySQL 5.6.51' 'MySQL 5.7.42' 'MySQL 8.0.46' 'MariaDB 5.5.68' 'MariaDB 10.4.29' 'MariaDB 10.5.20' 'MariaDB 10.6.13' 'MariaDB 10.11.3' 'MySQL 8.4.11' 'MySQL 9.7.2')
 PHP_Info=('PHP 7.0.33' 'PHP 7.1.33' 'PHP 7.2.34' 'PHP 7.3.33' 'PHP 7.4.33' 'PHP 8.0.28' 'PHP 8.1.19' 'PHP 8.2.6' 'PHP 8.3.24' 'PHP 8.4.11' 'PHP 8.5.6')
 Apache_Info=('Apache 2.2.34' 'Apache 2.4.57')
+
+Is_MySQL_DB()
+{
+    case "${1:-${DBSelect}}" in
+    1|2|3|4|5|11|12)
+        return 0
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}
+
+Is_MariaDB_DB()
+{
+    case "${1:-${DBSelect}}" in
+    6|7|8|9|10)
+        return 0
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}
+
+Is_Modern_MySQL_DB()
+{
+    case "${1:-${DBSelect}}" in
+    5|11|12)
+        return 0
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}
+
+Is_Modern_MySQL_Version()
+{
+    local version="${1:-${Mysql_Ver:-${mysql_version}}}"
+    version="${version#mysql-}"
+    case "${version}" in
+    8.*|9.*)
+        return 0
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}
+
+Get_MySQL_Binary_File()
+{
+    local version="${1:-${Mysql_Ver:-}}"
+    local arch="${2:-${DB_ARCH:-}}"
+    local version_without_prefix="${version#mysql-}"
+    local short_version="${version_without_prefix%.*}"
+    local glibc_version
+    local extension
+
+    case "${short_version}" in
+    5.5|5.6|5.7)
+        glibc_version="2.12"
+        extension="tar.gz"
+        ;;
+    8.0)
+        glibc_version="2.28"
+        extension="tar.xz"
+        ;;
+    8.*|9.*)
+        glibc_version="2.28"
+        extension="tar.xz"
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+
+    printf 'mysql-%s-linux-glibc%s-%s.%s\n' \
+        "${version_without_prefix}" "${glibc_version}" "${arch}" "${extension}"
+}
 
 Database_Selection()
 {
 #which MySQL Version do you want to install?
     if [ -z ${DBSelect} ]; then
         DBSelect="2"
-        Echo_Yellow "You have 11 options for your DataBase install."
+        Echo_Yellow "You have 12 options for your DataBase install."
         echo "1: Install ${DB_Info[0]}"
         echo "2: Install ${DB_Info[1]} (Default)"
         echo "3: Install ${DB_Info[2]}"
@@ -20,8 +101,10 @@ Database_Selection()
         echo "8: Install ${DB_Info[7]}"
         echo "9: Install ${DB_Info[8]}"
         echo "10: Install ${DB_Info[9]}"
+        echo "11: Install ${DB_Info[10]}"
+        echo "12: Install ${DB_Info[11]}"
         echo "0: DO NOT Install MySQL/MariaDB"
-        read -p "Enter your choice (1, 2, 3, 4, 5, 6, 7, 8, 9, 10 or 0): " DBSelect
+        read -p "Enter your choice (1-12 or 0): " DBSelect
     fi
 
     case "${DBSelect}" in
@@ -108,7 +191,7 @@ Database_Selection()
         fi
         ;;
     5)
-        if [[ "${DB_ARCH}" = "x86_64" || "${DB_ARCH}" = "i686" || "${DB_ARCH}" = "aarch64" ]]; then
+        if [[ "${DB_ARCH}" = "x86_64" || "${DB_ARCH}" = "aarch64" ]]; then
             if [ -z ${Bin} ]; then
                 read -p "Using Generic Binaries [y/n]: " Bin
             fi
@@ -143,19 +226,19 @@ Database_Selection()
             fi
             case "${Bin}" in
             [yY][eE][sS]|[yY])
-                echo "You will install ${DB_Info[3]} Using Generic Binaries."
+                echo "You will install ${DB_Info[5]} Using Generic Binaries."
                 Bin="y"
                 ;;
             [nN][oO]|[nN])
-                echo "You will install ${DB_Info[3]} from Source."
+                echo "You will install ${DB_Info[5]} from Source."
                 Bin="n"
                 ;;
             *)
                 if [ "${CheckMirror}" != "n" ]; then
-                    echo "Default install ${DB_Info[3]} Using Generic Binaries."
+                    echo "Default install ${DB_Info[5]} Using Generic Binaries."
                     Bin="y"
                 else
-                    echo "Default install ${DB_Info[3]} from Source."
+                    echo "Default install ${DB_Info[5]} from Source."
                     Bin="n"
                 fi
                 ;;
@@ -172,19 +255,19 @@ Database_Selection()
             fi
             case "${Bin}" in
             [yY][eE][sS]|[yY])
-                echo "You will install ${DB_Info[3]} Using Generic Binaries."
+                echo "You will install ${DB_Info[6]} Using Generic Binaries."
                 Bin="y"
                 ;;
             [nN][oO]|[nN])
-                echo "You will install ${DB_Info[3]} from Source."
+                echo "You will install ${DB_Info[6]} from Source."
                 Bin="n"
                 ;;
             *)
                 if [ "${CheckMirror}" != "n" ]; then
-                    echo "Default install ${DB_Info[3]} Using Generic Binaries."
+                    echo "Default install ${DB_Info[6]} Using Generic Binaries."
                     Bin="y"
                 else
-                    echo "Default install ${DB_Info[3]} from Source."
+                    echo "Default install ${DB_Info[6]} from Source."
                     Bin="n"
                 fi
                 ;;
@@ -201,19 +284,19 @@ Database_Selection()
             fi
             case "${Bin}" in
             [yY][eE][sS]|[yY])
-                echo "You will install ${DB_Info[3]} Using Generic Binaries."
+                echo "You will install ${DB_Info[7]} Using Generic Binaries."
                 Bin="y"
                 ;;
             [nN][oO]|[nN])
-                echo "You will install ${DB_Info[3]} from Source."
+                echo "You will install ${DB_Info[7]} from Source."
                 Bin="n"
                 ;;
             *)
                 if [ "${CheckMirror}" != "n" ]; then
-                    echo "Default install ${DB_Info[3]} Using Generic Binaries."
+                    echo "Default install ${DB_Info[7]} Using Generic Binaries."
                     Bin="y"
                 else
-                    echo "Default install ${DB_Info[3]} from Source."
+                    echo "Default install ${DB_Info[7]} from Source."
                     Bin="n"
                 fi
                 ;;
@@ -230,19 +313,19 @@ Database_Selection()
             fi
             case "${Bin}" in
             [yY][eE][sS]|[yY])
-                echo "You will install ${DB_Info[3]} Using Generic Binaries."
+                echo "You will install ${DB_Info[8]} Using Generic Binaries."
                 Bin="y"
                 ;;
             [nN][oO]|[nN])
-                echo "You will install ${DB_Info[3]} from Source."
+                echo "You will install ${DB_Info[8]} from Source."
                 Bin="n"
                 ;;
             *)
                 if [ "${CheckMirror}" != "n" ]; then
-                    echo "Default install ${DB_Info[3]} Using Generic Binaries."
+                    echo "Default install ${DB_Info[8]} Using Generic Binaries."
                     Bin="y"
                 else
-                    echo "Default install ${DB_Info[3]} from Source."
+                    echo "Default install ${DB_Info[8]} from Source."
                     Bin="n"
                 fi
                 ;;
@@ -259,24 +342,84 @@ Database_Selection()
             fi
             case "${Bin}" in
             [yY][eE][sS]|[yY])
-                echo "You will install ${DB_Info[3]} Using Generic Binaries."
+                echo "You will install ${DB_Info[9]} Using Generic Binaries."
                 Bin="y"
                 ;;
             [nN][oO]|[nN])
-                echo "You will install ${DB_Info[3]} from Source."
+                echo "You will install ${DB_Info[9]} from Source."
                 Bin="n"
                 ;;
             *)
                 if [ "${CheckMirror}" != "n" ]; then
-                    echo "Default install ${DB_Info[3]} Using Generic Binaries."
+                    echo "Default install ${DB_Info[9]} Using Generic Binaries."
                     Bin="y"
                 else
-                    echo "Default install ${DB_Info[3]} from Source."
+                    echo "Default install ${DB_Info[9]} from Source."
                     Bin="n"
                 fi
                 ;;
             esac
         else
+            Bin="n"
+        fi
+        ;;
+    11)
+        echo "You will install ${DB_Info[10]}"
+        if [[ "${DB_ARCH}" = "x86_64" || "${DB_ARCH}" = "aarch64" ]]; then
+            if [ -z "${Bin}" ]; then
+                read -p "Using Generic Binaries [y/n]: " Bin
+            fi
+            case "${Bin}" in
+            [yY][eE][sS]|[yY])
+                echo "You will install ${DB_Info[10]} Using Generic Binaries."
+                Bin="y"
+                ;;
+            [nN][oO]|[nN])
+                echo "You will install ${DB_Info[10]} from Source."
+                Bin="n"
+                ;;
+            *)
+                if [ "${CheckMirror}" != "n" ]; then
+                    echo "Default install ${DB_Info[10]} Using Generic Binaries."
+                    Bin="y"
+                else
+                    echo "Default install ${DB_Info[10]} from Source."
+                    Bin="n"
+                fi
+                ;;
+            esac
+        else
+            echo "Default install ${DB_Info[10]} from Source."
+            Bin="n"
+        fi
+        ;;
+    12)
+        echo "You will install ${DB_Info[11]}"
+        if [[ "${DB_ARCH}" = "x86_64" || "${DB_ARCH}" = "aarch64" ]]; then
+            if [ -z "${Bin}" ]; then
+                read -p "Using Generic Binaries [y/n]: " Bin
+            fi
+            case "${Bin}" in
+            [yY][eE][sS]|[yY])
+                echo "You will install ${DB_Info[11]} Using Generic Binaries."
+                Bin="y"
+                ;;
+            [nN][oO]|[nN])
+                echo "You will install ${DB_Info[11]} from Source."
+                Bin="n"
+                ;;
+            *)
+                if [ "${CheckMirror}" != "n" ]; then
+                    echo "Default install ${DB_Info[11]} Using Generic Binaries."
+                    Bin="y"
+                else
+                    echo "Default install ${DB_Info[11]} from Source."
+                    Bin="n"
+                fi
+                ;;
+            esac
+        else
+            echo "Default install ${DB_Info[11]} from Source."
             Bin="n"
         fi
         ;;
@@ -288,16 +431,16 @@ Database_Selection()
         DBSelect="2"
     esac
 
-    if [ "${Bin}" != "y" ] && [[ "${DBSelect}" =~ ^5|[7-9]|10$ ]] && [ $(awk '/MemTotal/ {printf( "%d\n", $2 / 1024 )}' /proc/meminfo) -le 1024 ]; then
-        echo "Memory less than 1GB, can't install MySQL 8.0 or MairaDB 10.3+!"
+    if [ "${Bin}" != "y" ] && { Is_Modern_MySQL_DB || Is_MariaDB_DB; } && [ $(awk '/MemTotal/ {printf( "%d\n", $2 / 1024 )}' /proc/meminfo) -le 1024 ]; then
+        echo "Memory less than 1GB, can't install MySQL 8.0+ or MariaDB 10.3+!"
         exit 1
     fi
 
-    if [[ "${DBSelect}" =~ ^[6789]|10$ ]]; then
+    if Is_MariaDB_DB; then
         MySQL_Bin="/usr/local/mariadb/bin/mysql"
         MySQL_Config="/usr/local/mariadb/bin/mysql_config"
         MySQL_Dir="/usr/local/mariadb"
-    elif [[ "${DBSelect}" =~ ^[12345]$ ]]; then
+    elif Is_MySQL_DB; then
         MySQL_Bin="/usr/local/mysql/bin/mysql"
         MySQL_Config="/usr/local/mysql/bin/mysql_config"
         MySQL_Dir="/usr/local/mysql"
@@ -832,7 +975,7 @@ Validate_Download_URL()
     Host="${Host%%:*}"
     Host="${Host,,}"
     case "${Host}" in
-        *.edu|archive.apache.org|cdn.mysql.com|dev.mysql.com|download.pureftpd.org|download.redis.io|download.savannah.nongnu.org|downloads.ioncube.com|downloads.mariadb.org|downloads.sourceforge.net|files.phpmyadmin.net|getcomposer.org|github.com|mirror.cs.uchicago.edu|mirror.math.princeton.edu|mirrors.mit.edu|museum.php.net|nginx.org|pecl.php.net|raw.githubusercontent.com|sourceforge.net|www.openssl.org|www.php.net)
+        *.edu|archive.apache.org|cdn.mysql.com|dev.mysql.com|download.pureftpd.org|download.redis.io|download.savannah.nongnu.org|downloads.mariadb.org|downloads.sourceforge.net|files.phpmyadmin.net|getcomposer.org|github.com|mirror.cs.uchicago.edu|mirror.math.princeton.edu|mirrors.mit.edu|museum.php.net|nginx.org|pecl.php.net|raw.githubusercontent.com|sourceforge.net|www.openssl.org|www.php.net)
             return 0
             ;;
         *)
@@ -1006,9 +1149,9 @@ Print_APP_Ver()
         echo "${Nginx_Ver}"
     fi
 
-    if [[ "${DBSelect}" =~ ^[12345]$ ]]; then
+    if Is_MySQL_DB; then
         echo "${Mysql_Ver}"
-    elif [[ "${DBSelect}" =~ ^[6789]|10$ ]]; then
+    elif Is_MariaDB_DB; then
         echo "${Mariadb_Ver}"
     elif [ "${DBSelect}" = "0" ]; then
         echo "Do not install MySQL/MariaDB!"
@@ -1036,9 +1179,9 @@ Print_APP_Ver()
     if [ "${Enable_Nginx_Lua}" = "y" ]; then
         echo "enable Nginx Lua."
     fi
-    if [[ "${DBSelect}" =~ ^[12345]$ ]]; then
+    if Is_MySQL_DB; then
         echo "Database Directory: ${MySQL_Data_Dir}"
-    elif [[ "${DBSelect}" =~ ^[6789]|10$ ]]; then
+    elif Is_MariaDB_DB; then
         echo "Database Directory: ${MariaDB_Data_Dir}"
     elif [ "${DBSelect}" = "0" ]; then
         echo "Do not install MySQL/MariaDB!"
@@ -1131,9 +1274,9 @@ Check_Mirror()
 
 Check_CMPT()
 {
-    if [[ "${DBSelect}" = "5" ]]; then
+    if Is_Modern_MySQL_DB; then
         if echo "${Ubuntu_Version}" | grep -Eqi "^1[0-7]\." || echo "${Debian_Version}" | grep -Eqi "^[4-8]" || echo "${Raspbian_Version}" | grep -Eqi "^[4-8]" || echo "${CentOS_Version}" | grep -Eqi "^[4-7]"  || echo "${RHEL_Version}" | grep -Eqi "^[4-7]" || echo "${Fedora_Version}" | grep -Eqi "^2[0-3]"; then
-            Echo_Red "MySQL 8.0 please use latest linux distributions!"
+            Echo_Red "MySQL 8.0+ please use latest Linux distributions!"
             exit 1
         fi
     fi

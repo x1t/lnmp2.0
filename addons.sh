@@ -15,45 +15,21 @@ action2=$2
 . include/main.sh
 . include/init.sh
 . include/version.sh
-. include/eaccelerator.sh
-. include/xcache.sh
-. include/memcached.sh
-. include/opcache.sh
 . include/redis.sh
-. include/imageMagick.sh
-. include/ionCube.sh
-. include/apcu.sh
 . include/php_exif.sh
 . include/php_fileinfo.sh
 . include/php_ldap.sh
 . include/php_bz2.sh
-. include/php_sodium.sh
-. include/php_imap.sh
-. include/php_swoole.sh
-. include/php_SourceGuardian.sh
 
 Display_Addons_Menu()
 {
-    echo "##### cache / optimizer / accelerator #####"
-    echo "  1: eAccelerator"
-    echo "  2: XCache"
-    echo "  3: Memcached"
-    echo "  4: opcache"
-    echo "  5: Redis"
-    echo "  6: apcu"
-    echo "##### Image Processing #####"
-    echo "  7: imageMagick"
-    echo "##### encryption/decryption utility for PHP #####"
-    echo "  8: ionCube Loader"
-    echo "  9: SourceGuardian Loader"
+    echo "##### cache #####"
+    echo "  1: Redis"
     echo "##### PHP Modules/Extensions #####"
-    echo " 10: Exif"
-    echo " 11: Fileinfo"
-    echo " 12: Ldap"
-    echo " 13: Bz2"
-    echo " 14: Sodium"
-    echo " 15: Imap"
-    echo " 16: Swoole"
+    echo "  2: Ldap"
+    echo "  3: Bz2"
+    echo "  4: Exif"
+    echo "  5: Fileinfo"
     echo "#################################################"
     echo " exit: Exit current script"
     echo "#################################################"
@@ -238,96 +214,33 @@ Select_PHP
     case "${action}" in
     install)
         case "${action2}" in
-            1|e[aA]ccelerator)
-                Install_eAccelerator
-                ;;
-            2|[xX]cache)
-                Install_XCache
-                ;;
-            3|[mM]emcached)
-                Install_Memcached
-                ;;
-            4|opcache)
-                Install_Opcache
-                ;;
-            5|[rR]edis)
+            1|[rR]edis)
                 Install_Redis
                 ;;
-            6|apcu)
-                Install_Apcu
-                ;;
-            7|image[mM]agick)
-                Install_ImageMagic
-                ;;
-            8|ion[cC]ube)
-                Install_ionCube
-                ;;
-            9|[sS][gG])
-                Install_SourceGuardian
-                ;;
-            10|[eE]xif)
-                Install_PHP_Exif
-                ;;
-            11|[fF]ileinfo)
-                Install_PHP_Fileinfo
-                ;;
-            12|[lL]dap)
+            2|[lL]dap)
                 Install_PHP_Ldap
                 ;;
-            13|[bB]z2)
+            3|[bB]z2)
                 Install_PHP_Bz2
                 ;;
-            14|[sS]odium)
-                Install_PHP_Sodium
+            4|[eE]xif)
+                Install_PHP_Exif
                 ;;
-            15|[iI]map)
-                Install_PHP_Imap
-                ;;
-            16|[sS]woole)
-                Install_PHP_Swoole
+            5|[fF]ileinfo)
+                Install_PHP_Fileinfo
                 ;;
             [eE][xX][iI][tT])
                 exit 1
                 ;;
             *)
-                echo "Usage: ./addons.sh install {eaccelerator|xcache|memcached|opcache|redis|imagemagick|ioncube|sg|exif|fileinfo|ldap|bz2|sodium|imap|swoole}"
+                echo "Usage: ./addons.sh install {redis|ldap|bz2|exif|fileinfo}"
                 ;;
         esac
         ;;
     uninstall)
         case "${action2}" in
-            e[aA]ccelerator)
-                Uninstall_eAccelerator
-                ;;
-            [xX]cache)
-                Uninstall_XCache
-                ;;
-            [mM]emcached)
-                Uninstall_Memcached
-                ;;
-            opcache)
-                Uninstall_Opcache
-                ;;
             [rR]edis)
                 Uninstall_Redis
-                ;;
-            apcu)
-                Uninstall_Apcu
-                ;;
-            image[mM]agick)
-                Uninstall_ImageMagick
-                ;;
-            ion[cC]ube)
-                Uninstall_ionCube
-                ;;
-            [sS][gG])
-                Uninstall_SourceGuardian
-                ;;
-            [eE]xif)
-                Uninstall_PHP_Exif
-                ;;
-            [fF]ileinfo)
-                Uninstall_PHP_Fileinfo
                 ;;
             [lL]dap)
                 Uninstall_PHP_Ldap
@@ -335,17 +248,14 @@ Select_PHP
             [bB]z2)
                 Uninstall_PHP_Bz2
                 ;;
-            [sS]odium)
-                Uninstall_PHP_Sodium
+            [eE]xif)
+                Uninstall_PHP_Exif
                 ;;
-            [iI]map)
-                Uninstall_PHP_Imap
-                ;;
-            [sS]woole)
-                Uninstall_PHP_Swoole
+            [fF]ileinfo)
+                Uninstall_PHP_Fileinfo
                 ;;
             *)
-                echo "Usage: ./addons.sh uninstall {eaccelerator|xcache|memcached|opcache|redis|apcu|imagemagick|ioncube|sg|exif|fileinfo|ldap|bz2|sodium|imap|swoole}"
+                echo "Usage: ./addons.sh uninstall {redis|ldap|bz2|exif|fileinfo}"
                 ;;
         esac
         ;;
@@ -353,7 +263,7 @@ Select_PHP
         exit 1
         ;;
     *)
-        echo "Usage: ./addons.sh {install|uninstall} {eaccelerator|xcache|memcached|opcache|redis|apcu|imagemagick|ioncube|sg|exif|fileinfo|ldap|bz2|sodium|imap|swoole}"
+        echo "Usage: ./addons.sh {install|uninstall} {redis|ldap|bz2|exif|fileinfo}"
         exit 1
         ;;
     esac

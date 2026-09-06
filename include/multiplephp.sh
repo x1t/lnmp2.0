@@ -117,10 +117,6 @@ Install_MPHP7.0()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' ${MPHP_Path}/etc/php.ini
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7..."
-    echo "unavailable now."
-
     echo "Creating new php-fpm configure file..."
     cat >${MPHP_Path}/etc/php-fpm.conf<<EOF
 [global]
@@ -199,10 +195,6 @@ Install_MPHP7.1()
     sed -i 's/;cgi.fix_pathinfo=.*/cgi.fix_pathinfo=0/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' ${MPHP_Path}/etc/php.ini
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7.1..."
-    echo "unavailable now."
 
     echo "Creating new php-fpm configure file..."
     cat >${MPHP_Path}/etc/php-fpm.conf<<EOF
@@ -283,10 +275,6 @@ Install_MPHP7.2()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' ${MPHP_Path}/etc/php.ini
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7.2..."
-    echo "unavailable now."
-
     echo "Creating new php-fpm configure file..."
     cat >${MPHP_Path}/etc/php-fpm.conf<<EOF
 [global]
@@ -365,10 +353,6 @@ Install_MPHP7.3()
     sed -i 's/;cgi.fix_pathinfo=.*/cgi.fix_pathinfo=0/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' ${MPHP_Path}/etc/php.ini
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7.3..."
-    echo "unavailable now."
 
     echo "Creating new php-fpm configure file..."
     cat >${MPHP_Path}/etc/php-fpm.conf<<EOF
@@ -449,10 +433,6 @@ Install_MPHP7.4()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' ${MPHP_Path}/etc/php.ini
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7.4..."
-    echo "unavailable now."
-
     echo "Creating new php-fpm configure file..."
     cat >${MPHP_Path}/etc/php-fpm.conf<<EOF
 [global]
@@ -532,10 +512,6 @@ Install_MPHP8.0()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' ${MPHP_Path}/etc/php.ini
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8.0..."
-    echo "unavailable now."
-
     echo "Creating new php-fpm configure file..."
     cat >${MPHP_Path}/etc/php-fpm.conf<<EOF
 [global]
@@ -613,10 +589,6 @@ Install_MPHP8.1()
     sed -i 's/;cgi.fix_pathinfo=.*/cgi.fix_pathinfo=0/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' ${MPHP_Path}/etc/php.ini
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8.1..."
-    echo "unavailable now."
 
     echo "Creating new php-fpm configure file..."
     cat >${MPHP_Path}/etc/php-fpm.conf<<EOF
@@ -696,10 +668,6 @@ Install_MPHP8.2()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' ${MPHP_Path}/etc/php.ini
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8.2..."
-    echo "unavailable now."
-
     echo "Creating new php-fpm configure file..."
     cat >${MPHP_Path}/etc/php-fpm.conf<<EOF
 [global]
@@ -778,10 +746,6 @@ Install_MPHP8.3()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' ${MPHP_Path}/etc/php.ini
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8.3..."
-    echo "unavailable now."
-
     echo "Creating new php-fpm configure file..."
     cat >${MPHP_Path}/etc/php-fpm.conf<<EOF
 [global]
@@ -859,10 +823,6 @@ Install_MPHP8.4()
     sed -i 's/;cgi.fix_pathinfo=.*/cgi.fix_pathinfo=0/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' ${MPHP_Path}/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' ${MPHP_Path}/etc/php.ini
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8.4..."
-    echo "unavailable now."
 
     echo "Creating new php-fpm configure file..."
     cat >${MPHP_Path}/etc/php-fpm.conf<<EOF

@@ -70,12 +70,12 @@ Install_PHP_Dependent()
         else
             yum -y install epel-release
         fi
-        for packages in make gcc gcc-c++ gcc-g77 libjpeg libjpeg-devel libjpeg-turbo-devel libpng libpng-devel libpng10 libpng10-devel gd gd-devel libxml2 libxml2-devel zlib zlib-devel glib2-devel bzip2-devel libzip-devel libevent libevent-devel ncurses ncurses-devel curl-devel libcurl libcurl-devel e2fsprogs-devel krb5 krb5-devel libidn libidn-devel openssl-devel gettext-devel ncurses-devel gmp-devel pspell-devel libc-client-devel libXpm-devel libtirpc-devel cyrus-sasl-devel c-ares-devel libicu-devel libxslt libxslt-devel xz expat-devel libzip-devel bzip2 bzip2-devel sqlite-devel oniguruma-devel libwebp-devel;
+        for packages in make gcc gcc-c++ gcc-g77 libjpeg libjpeg-devel libjpeg-turbo-devel libpng libpng-devel libpng10 libpng10-devel gd gd-devel libxml2 libxml2-devel zlib zlib-devel glib2-devel bzip2-devel libzip-devel libevent libevent-devel ncurses ncurses-devel curl-devel libcurl libcurl-devel e2fsprogs-devel krb5 krb5-devel libidn libidn-devel openssl-devel gettext-devel ncurses-devel gmp-devel pspell-devel libXpm-devel libtirpc-devel cyrus-sasl-devel c-ares-devel libicu-devel libxslt libxslt-devel xz expat-devel libzip-devel bzip2 bzip2-devel sqlite-devel oniguruma-devel libwebp-devel;
         do yum -y install $packages; done
     elif [ "$PM" = "apt" ]; then
         export DEBIAN_FRONTEND=noninteractive
         apt-get update
-        for packages in debian-keyring debian-archive-keyring build-essential gcc g++ make libzip-dev libc6-dev libbz2-dev libncurses5 libncurses5-dev libevent-dev libssl-dev libsasl2-dev libltdl3-dev libltdl-dev zlib1g zlib1g-dev libbz2-1.0 libbz2-dev libglib2.0-0 libglib2.0-dev libpng3 libjpeg-dev libpng-dev libpng12-0 libpng12-dev libkrb5-dev libpq-dev libpq5 libpng12-dev libxml2-dev libcap-dev libc-client2007e-dev libaio-dev libtirpc-dev libc-ares-dev libicu-dev e2fsprogs libxslt1.1 libxslt1-dev libc-client-dev xz-utils libexpat1-dev bzip2 libbz2-dev libsqlite3-dev libonig-dev libwebp-dev;
+        for packages in debian-keyring debian-archive-keyring build-essential gcc g++ make libzip-dev libc6-dev libbz2-dev libncurses5 libncurses5-dev libevent-dev libssl-dev libsasl2-dev libltdl3-dev libltdl-dev zlib1g zlib1g-dev libbz2-1.0 libbz2-dev libglib2.0-0 libglib2.0-dev libpng3 libjpeg-dev libpng-dev libpng12-0 libpng12-dev libkrb5-dev libpq-dev libpq5 libpng12-dev libxml2-dev libcap-dev libaio-dev libtirpc-dev libc-ares-dev libicu-dev e2fsprogs libxslt1.1 libxslt1-dev xz-utils libexpat1-dev bzip2 libbz2-dev libsqlite3-dev libonig-dev libwebp-dev;
         do apt-get --no-install-recommends install -y $packages; done
     fi
 
@@ -129,8 +129,7 @@ Install_PHP_Dependent()
             rpm -ivh ${cur_dir}/src/oniguruma-6.8.2-1.el7.x86_64.rpm ${cur_dir}/src/oniguruma-devel-6.8.2-1.el7.x86_64.rpm
         fi
         echo "Installing additional PHP 8.4 dependencies..."
-        yum -y install libsodium-devel cmake3
-        yum -y install libc-client-devel uw-imap-devel
+        yum -y install cmake3
         # Ensure cmake minimum version for libzip compilation
         if ! command -v cmake >/dev/null 2>&1; then
             alternatives --install /usr/local/bin/cmake cmake /usr/bin/cmake3 20
@@ -302,21 +301,6 @@ Upgrade_PHP_52()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server,fsocket/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
 
-    cd ${cur_dir}/src
-    if [ "${Is_ARM}" != "y" ]; then
-        echo "Install ZendGuardLoader for PHP 5.2..."
-        Download_Files ${Download_Mirror}/web/zend/ZendOptimizer-3.3.9-linux-glibc23-${ARCH}.tar.gz ZendOptimizer-3.3.9-linux-glibc23-${ARCH}.tar.gz
-        Tar_Cd ZendOptimizer-3.3.9-linux-glibc23-${ARCH}.tar.gz
-        mkdir -p /usr/local/zend/
-        \cp ZendOptimizer-3.3.9-linux-glibc23-${ARCH}/data/5_2_x_comp/ZendOptimizer.so /usr/local/zend/
-
-        cat >/usr/local/php/conf.d/002-zendoptimizer.ini<<EOF
-[Zend Optimizer]
-zend_optimizer.optimization_level=1
-zend_extension="/usr/local/zend/ZendOptimizer.so"
-EOF
-    fi
-
     if [ "${Stack}" = "lnmp" ]; then
         rm -f /usr/local/php/etc/php-fpm.conf
         \cp ${cur_dir}/conf/php-fpm5.2.conf /usr/local/php/etc/php-fpm.conf
@@ -358,30 +342,6 @@ Upgrade_PHP_53()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    echo "Install ZendGuardLoader..."
-    cd ${cur_dir}/src
-    if [ "${Is_ARM}" != "y" ]; then
-        echo "Install ZendGuardLoader for PHP 5.3..."
-        Download_Files ${Download_Mirror}/web/zend/ZendGuardLoader-php-5.3-linux-glibc23-${ARCH}.tar.gz ZendGuardLoader-php-5.3-linux-glibc23-${ARCH}.tar.gz
-        Tar_Cd ZendGuardLoader-php-5.3-linux-glibc23-${ARCH}.tar.gz
-        mkdir -p /usr/local/zend/
-        \cp ZendGuardLoader-php-5.3-linux-glibc23-${ARCH}/php-5.3.x/ZendGuardLoader.so /usr/local/zend/
-
-        echo "Write ZendGuardLoader to php.ini......"
-        cat >/usr/local/php/conf.d/002-zendguardloader.ini<<EOF
-[Zend Optimizer]
-zend_extension=/usr/local/zend/ZendGuardLoader.so
-zend_loader.enable=1
-zend_loader.disable_licensing=0
-zend_loader.obfuscation_level_support=3
-zend_loader.license_path=
-EOF
-
-        if grep -q '^LoadModule mpm_event_module' /usr/local/apache/conf/httpd.conf && [ "${Stack}" != "lnmp" ]; then
-            mv /usr/local/php/conf.d/002-zendguardloader.ini /usr/local/php/conf.d/002-zendguardloader.ini.disable
-        fi
-    fi
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file......"
@@ -452,29 +412,6 @@ Upgrade_PHP_54()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    cd ${cur_dir}/src
-    if [ "${Is_ARM}" != "y" ]; then
-        echo "Install ZendGuardLoader for PHP 5.4..."
-        Download_Files ${Download_Mirror}/web/zend/ZendGuardLoader-70429-PHP-5.4-linux-glibc23-${ARCH}.tar.gz ZendGuardLoader-70429-PHP-5.4-linux-glibc23-${ARCH}.tar.gz
-        Tar_Cd ZendGuardLoader-70429-PHP-5.4-linux-glibc23-${ARCH}.tar.gz
-        mkdir -p /usr/local/zend/
-        \cp ZendGuardLoader-70429-PHP-5.4-linux-glibc23-${ARCH}/php-5.4.x/ZendGuardLoader.so /usr/local/zend/
-
-        echo "Write ZendGuardLoader to php.ini......"
-        cat >/usr/local/php/conf.d/002-zendguardloader.ini<<EOF
-[Zend ZendGuard Loader]
-zend_extension=/usr/local/zend/ZendGuardLoader.so
-zend_loader.enable=1
-zend_loader.disable_licensing=0
-zend_loader.obfuscation_level_support=3
-zend_loader.license_path=
-EOF
-
-        if grep -q '^LoadModule mpm_event_module' /usr/local/apache/conf/httpd.conf && [ "${Stack}" != "lnmp" ]; then
-            mv /usr/local/php/conf.d/002-zendguardloader.ini /usr/local/php/conf.d/002-zendguardloader.ini.disable
-        fi
-    fi
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file......"
@@ -550,40 +487,6 @@ Upgrade_PHP_556()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    cd ${cur_dir}/src
-    if [ "${Is_ARM}" != "y" ]; then
-        if echo "${php_version}" | grep -Eqi '^5.5.';then
-            echo "Install ZendGuardLoader for PHP 5.5..."
-            Download_Files ${Download_Mirror}/web/zend/zend-loader-php5.5-linux-${ARCH}.tar.gz zend-loader-php5.5-linux-${ARCH}.tar.gz
-            Tar_Cd zend-loader-php5.5-linux-${ARCH}.tar.gz
-            mkdir -p /usr/local/zend/
-            \cp zend-loader-php5.5-linux-${ARCH}/ZendGuardLoader.so /usr/local/zend/
-        elif echo "${php_version}" | grep -Eqi '^5.6.';then
-            echo "Install ZendGuardLoader for PHP 5.6..."
-            Download_Files ${Download_Mirror}/web/zend/zend-loader-php5.6-linux-${ARCH}.tar.gz zend-loader-php5.6-linux-${ARCH}.tar.gz
-            Tar_Cd zend-loader-php5.6-linux-${ARCH}.tar.gz
-            mkdir -p /usr/local/zend/
-            \cp zend-loader-php5.6-linux-${ARCH}/ZendGuardLoader.so /usr/local/zend/
-        fi
-
-        echo "Write ZendGuardLoader to php.ini......"
-        cat >/usr/local/php/conf.d/002-zendguardloader.ini<<EOF
-[Zend ZendGuard Loader]
-zend_extension=/usr/local/zend/ZendGuardLoader.so
-zend_loader.enable=1
-zend_loader.disable_licensing=0
-zend_loader.obfuscation_level_support=3
-zend_loader.license_path=
-EOF
-
-        if grep -q '^LoadModule mpm_event_module' /usr/local/apache/conf/httpd.conf && [ "${Stack}" != "lnmp" ]; then
-            mv /usr/local/php/conf.d/002-zendguardloader.ini /usr/local/php/conf.d/002-zendguardloader.ini.disable
-        fi
-    fi
-
-    echo "Download Opcache Control Panel..."
-    \cp ${cur_dir}/conf/ocp.php /home/wwwroot/default/ocp.php
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file......"
@@ -661,10 +564,6 @@ Upgrade_PHP_7()
     Pear_Pecl_Set
     Install_Composer
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7..."
-    echo "unavailable now."
-
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
     cat >/usr/local/php/etc/php-fpm.conf<<EOF
@@ -737,10 +636,6 @@ Upgrade_PHP_72()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7..."
-    echo "unavailable now."
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -815,10 +710,6 @@ Upgrade_PHP_73()
     Pear_Pecl_Set
     Install_Composer
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7..."
-    echo "unavailable now."
-
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
     cat >/usr/local/php/etc/php-fpm.conf<<EOF
@@ -891,10 +782,6 @@ Upgrade_PHP_74()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 7..."
-    echo "unavailable now."
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -969,10 +856,6 @@ Upgrade_PHP_80()
     Pear_Pecl_Set
     Install_Composer
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8..."
-    echo "unavailable now."
-
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
     cat >/usr/local/php/etc/php-fpm.conf<<EOF
@@ -1045,10 +928,6 @@ Upgrade_PHP_81()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8..."
-    echo "unavailable now."
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -1123,10 +1002,6 @@ Upgrade_PHP_82()
     Pear_Pecl_Set
     Install_Composer
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8..."
-    echo "unavailable now."
-
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
     cat >/usr/local/php/etc/php-fpm.conf<<EOF
@@ -1199,10 +1074,6 @@ Upgrade_PHP_83()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8..."
-    echo "unavailable now."
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -1277,10 +1148,6 @@ Upgrade_PHP_84()
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
     Install_Composer
-
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8..."
-    echo "unavailable now."
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."

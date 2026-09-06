@@ -67,7 +67,7 @@ MySQL_Sec_Setting()
     /etc/init.d/mysql restart || return 1
     sleep 2
 
-    if [ "${DBSelect}" = "5" ]; then
+    if Is_Modern_MySQL_DB || Is_Modern_MySQL_Version; then
         local -a mysql_root_cmd
         if [ -n "${MySQL_Temporary_Password:-}" ]; then
             mysql_root_cmd=(env "MYSQL_PWD=${MySQL_Temporary_Password}" /usr/local/mysql/bin/mysql --connect-expired-password --protocol=socket -u root)
@@ -92,7 +92,7 @@ EOF
                 rm -f ~/.emptymy.cnf
                 return 1
             }
-        elif [ "${DBSelect}" = "5" ] || echo "${mysql_version}" | grep -Eqi '^8.0.'; then
+        elif Is_Modern_MySQL_DB || Is_Modern_MySQL_Version; then
             /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "SET PASSWORD FOR 'root'@'localhost' = '${DB_Root_Password}';" || {
                 rm -f ~/.emptymy.cnf
                 return 1
@@ -117,7 +117,7 @@ EOF
     echo "Update root password..."
     if [ "${DBSelect}" = "4" ] || echo "${mysql_version}" | grep -Eqi '^5.7.'; then
         Do_Query "UPDATE mysql.user SET authentication_string=PASSWORD('${DB_Root_Password}') WHERE User='root';" || return 1
-    elif [ "${DBSelect}" = "5" ] || echo "${mysql_version}" | grep -Eqi '^8.0.'; then
+    elif Is_Modern_MySQL_DB || Is_Modern_MySQL_Version; then
         Do_Query "SET PASSWORD FOR 'root'@'localhost' = '${DB_Root_Password}';" || return 1
     else
         Do_Query "UPDATE mysql.user SET Password=PASSWORD('${DB_Root_Password}') WHERE User='root';" || return 1
@@ -143,7 +143,7 @@ EOF
 Set_MySQL_Redo_Log()
 {
     local size="$1"
-    if [ "${DBSelect}" = "5" ]; then
+    if Is_Modern_MySQL_DB || Is_Modern_MySQL_Version; then
         sed -i "s#^innodb_redo_log_capacity.*#innodb_redo_log_capacity = ${size}#" /etc/my.cnf
     else
         sed -i "s#^innodb_log_file_size.*#innodb_log_file_size = ${size}#" /etc/my.cnf
@@ -730,10 +730,8 @@ Install_MySQL_80()
     rm -f /etc/my.cnf
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "[+] Installing ${Mysql_Ver} Using Generic Binaries..."
-        mysql8_glibc_ver="${mysql8_glibc_ver:-2.28}"
-        mysql8_ext="${mysql8_ext:-tar.xz}"
-        mysql8_file="${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext}"
-        mysql8_dir="${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}"
+        mysql8_file=$(Get_MySQL_Binary_File "${Mysql_Ver}" "${DB_ARCH}") || return 1
+        mysql8_dir="${mysql8_file%.tar.*}"
         Tar_Cd "${mysql8_file}" "${mysql8_dir}" || return 1
         cd "${cur_dir}/src"
         mkdir -p /usr/local/mysql
@@ -744,7 +742,7 @@ Install_MySQL_80()
         Tar_Cd ${Mysql_Ver}.tar.gz ${Mysql_Ver}
         Install_Boost
         mkdir build && cd build || return 1
-        cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_BOOST} || return 1
+        cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_BOOST} || return 1
         Make_Install || return 1
     fi
 
@@ -852,4 +850,14 @@ EOF
     ln -sf /usr/local/mysql/include/mysql /usr/include/mysql || return 1
 
     MySQL_Sec_Setting || return 1
+}
+
+Install_MySQL_84()
+{
+    Install_MySQL_80
+}
+
+Install_MySQL_97()
+{
+    Install_MySQL_80
 }
