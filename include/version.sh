@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 Autoconf_Ver='autoconf-2.13'
-Libiconv_Ver='libiconv-1.17'
+Libiconv_Ver='libiconv-1.18'
 LibMcrypt_Ver='libmcrypt-2.5.8'
 Mcypt_Ver='mcrypt-2.6.8'
 Mhash_Ver='mhash-0.9.9.9'
 Freetype_Ver='freetype-2.7'
-Freetype_New_Ver='freetype-2.13.0'
+Freetype_New_Ver='freetype-2.14.3'
 Curl_Ver='curl-7.62.0'
 Pcre_Ver='pcre-8.44'
 Jemalloc_Ver='jemalloc-5.3.0'
@@ -24,7 +24,7 @@ LuaNginxModule='lua-nginx-module-0.10.24'
 LuaRestyCore='lua-resty-core-0.1.26'
 LuaRestyLrucache='lua-resty-lrucache-0.13'
 NgxDevelKit='ngx_devel_kit-0.3.2'
-Nginx_Ver='nginx-1.29.0'
+Nginx_Ver='nginx-1.30.4'
 NgxFancyIndex_Ver='ngx-fancyindex-0.5.2'
 if [ "${DBSelect}" = "1" ]; then
     Mysql_Ver='mysql-5.1.73'
@@ -35,7 +35,7 @@ elif [ "${DBSelect}" = "3" ]; then
 elif [ "${DBSelect}" = "4" ]; then
     Mysql_Ver='mysql-5.7.42'
 elif [ "${DBSelect}" = "5" ]; then
-    Mysql_Ver='mysql-8.0.33'
+    Mysql_Ver='mysql-8.0.46'
 elif [ "${DBSelect}" = "6" ]; then
     Mariadb_Ver='mariadb-5.5.68'
 elif [ "${DBSelect}" = "7" ]; then
@@ -67,6 +67,8 @@ elif [ "${PHPSelect}" = "9" ]; then
     Php_Ver='php-8.3.24'
 elif [ "${PHPSelect}" = "10" ]; then
     Php_Ver='php-8.4.11'
+elif [ "${PHPSelect}" = "11" ]; then
+    Php_Ver='php-8.5.6'
 fi
 if [[ "${PHPSelect}" =~ ^[12]$ ]]; then
     PhpMyAdmin_Ver='phpMyAdmin-4.9.11-all-languages'

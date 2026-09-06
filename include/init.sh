@@ -34,11 +34,16 @@ CentOS_InstallNTP()
 Deb_InstallNTP()
 {
     if [ "${CheckMirror}" != "n" ]; then
-        apt-get update -y
-        [[ $? -ne 0 ]] && apt-get update --allow-releaseinfo-change -y
-        Echo_Blue "[+] Installing ntp..."
-        apt-get install -y ntpdate
-        ntpdate -u pool.ntp.org
+        if ! apt-get update; then
+            apt-get update --allow-releaseinfo-change || return 1
+        fi
+        if ! command -v ntpdate >/dev/null 2>&1 && apt-cache show ntpsec-ntpdate >/dev/null 2>&1; then
+            Echo_Blue "[+] Installing ntpsec-ntpdate..."
+            apt-get install -y ntpsec-ntpdate || return 1
+        fi
+        if command -v ntpdate >/dev/null 2>&1; then
+            ntpdate -u pool.ntp.org >/dev/null 2>&1 || true
+        fi
     fi
     date
     start_time=$(date +%s)
@@ -70,32 +75,34 @@ CentOS_RemoveAMP()
 Deb_RemoveAMP()
 {
     Echo_Blue "[-] apt-get remove packages..."
-    apt-get update -y
-    [[ $? -ne 0 ]] && apt-get update --allow-releaseinfo-change -y
-    for removepackages in apache2 apache2-doc apache2-utils apache2.2-common apache2.2-bin apache2-mpm-prefork apache2-doc apache2-mpm-worker php5 php5-common php5-cgi php5-cli php5-mysql php5-curl php5-gd;
-    do apt-get purge -y $removepackages; done
+    if ! apt-get update; then
+        apt-get update --allow-releaseinfo-change || return 1
+    fi
+    local package
+    local installed_packages=()
+    local remove_packages=(apache2 apache2-doc apache2-utils apache2-bin apache2-data apache2.2-common apache2.2-bin apache2-mpm-prefork apache2-mpm-worker php5 php5-common php5-cgi php5-cli php5-mysql php5-curl php5-gd php-cli php-fpm php-common php-curl php-gd php-mysql)
+    for package in "${remove_packages[@]}"; do
+        if dpkg-query -W -f='${Status}' "${package}" 2>/dev/null | grep -q 'install ok installed'; then
+            installed_packages+=("${package}")
+        fi
+    done
+    if [ "${#installed_packages[@]}" -gt 0 ]; then
+        apt-get purge -y "${installed_packages[@]}" || return 1
+    fi
     if [[ "${DBSelect}" != "0" ]]; then
-        if echo "${Ubuntu_Version}" | grep -Eqi "^2[0-7]\."; then
-            dpkg -l |grep mysql
-            dpkg --force-all -P mysql-server
-            dpkg --force-all -P mariadb-client mariadb-server mariadb-common libmariadbd-dev
-            [[ -d "/etc/mysql" ]] && rm -rf /etc/mysql
-            for removepackages in mysql-server mariadb-server;
-            do apt-get purge -y $removepackages; done
-        else
-            dpkg -l |grep mysql
-            dpkg --force-all -P mysql-server mysql-common libmysqlclient15off libmysqlclient15-dev libmysqlclient18 libmysqlclient18-dev libmysqlclient20 libmysqlclient-dev libmysqlclient21
-            dpkg --force-all -P mariadb-client mariadb-server mariadb-common libmariadbd-dev
-            for removepackages in mysql-client mysql-server mysql-common mysql-server-core-5.5 mysql-client-5.5 mariadb-client mariadb-server mariadb-common;
-            do apt-get purge -y $removepackages; done
+        installed_packages=()
+        local database_packages=(mysql-client mysql-server mysql-common mysql-server-core-5.5 mysql-client-5.5 mysql-server-core-8.0 mysql-client-core-8.0 mariadb-client mariadb-server mariadb-common mariadb-server-core libmariadbd-dev)
+        for package in "${database_packages[@]}"; do
+            if dpkg-query -W -f='${Status}' "${package}" 2>/dev/null | grep -q 'install ok installed'; then
+                installed_packages+=("${package}")
+            fi
+        done
+        if [ "${#installed_packages[@]}" -gt 0 ]; then
+            apt-get purge -y "${installed_packages[@]}" || return 1
         fi
     fi
-    killall apache2
-    dpkg -l |grep apache
-    dpkg -P apache2 apache2-doc apache2-mpm-prefork apache2-utils apache2.2-common
-    dpkg -l |grep php
-    dpkg -P php5 php5-common php5-cli php5-cgi php5-mysql php5-curl php5-gd
-    apt-get autoremove -y && apt-get clean
+    killall apache2 >/dev/null 2>&1 || true
+    apt-get clean || return 1
 }
 
 Disable_Selinux()
@@ -427,68 +434,50 @@ CentOS_Dependent()
 Deb_Dependent()
 {
     Echo_Blue "[+] Apt-get installing dependent packages..."
-    apt-get update -y
-    [[ $? -ne 0 ]] && apt-get update --allow-releaseinfo-change -y
-    apt-get autoremove -y
-    apt-get -fy install
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get --no-install-recommends install -y build-essential gcc g++ make
-    # Check for Debian 13 Trixie and adjust package names
-    if [ "${DISTRO}" = "Debian" ] && echo "${Debian_Version}" | grep -Eqi "^13"; then
-        # Debian 13 Trixie package adjustments
-        echo "Detected Debian 13 Trixie, adjusting package names..."
-        libaio_pkg="libaio1t64"
-        libncurses_pkg="libncurses6 libncurses-dev"
-        libtinfo_pkg="libtinfo6"
-    else
-        # Traditional package names for older Debian versions
-        libaio_pkg="libaio-dev"
-        libncurses_pkg="libncurses5 libncurses5-dev"
-        libtinfo_pkg="libtinfo-dev"
+    if ! apt-get update; then
+        apt-get update --allow-releaseinfo-change || return 1
     fi
-    
-    for packages in debian-keyring debian-archive-keyring build-essential gcc g++ make cmake autoconf automake re2c wget cron bzip2 libzip-dev libc6-dev bison file rcconf flex bison m4 gawk less cpp binutils diffutils unzip tar bzip2 libbz2-dev ${libncurses_pkg} libtool libevent-dev openssl libssl-dev zlibc libsasl2-dev libltdl3-dev libltdl-dev zlib1g zlib1g-dev libbz2-1.0 libbz2-dev libglib2.0-0 libglib2.0-dev libpng3 libjpeg-dev libpng-dev libpng12-0 libpng12-dev libkrb5-dev curl libcurl3-gnutls libcurl4-gnutls-dev libcurl4-openssl-dev libpcre3-dev libpq-dev libpq5 gettext libpng12-dev libxml2-dev libcap-dev ca-certificates libc-client2007e-dev psmisc patch git libc-ares-dev libicu-dev e2fsprogs libxslt1.1 libxslt1-dev libc-client-dev xz-utils libexpat1-dev ${libaio_pkg} libtirpc-dev libsqlite3-dev libonig-dev lsof pkg-config ${libtinfo_pkg} libnuma-dev libwebp-dev gnutls-dev iproute2 xz-utils gzip libpcre2-dev libtool-bin libreadline-dev libfcgi-dev libfreetype6-dev libgd-dev libpspell-dev;
-    do apt-get --no-install-recommends install -y $packages; done
+    apt-get -fy install || return 1
+    export DEBIAN_FRONTEND=noninteractive
+    local package
+    local available_packages=()
+    if [ "${DISTRO}" = "Debian" ] && echo "${Debian_Version}" | grep -Eqi "^13"; then
+        echo "Detected Debian 13 Trixie, adjusting package names..."
+        runtime_packages=(libaio1t64 libncurses-dev libtinfo6)
+    else
+        runtime_packages=(libaio1 libaio-dev libncurses5 libncurses5-dev libtinfo-dev)
+    fi
+    local packages=(debian-keyring debian-archive-keyring build-essential gcc g++ make cmake autoconf automake re2c wget cron bzip2 libzip-dev libc6-dev bison file flex m4 gawk less cpp binutils diffutils unzip tar libbz2-dev libtool libevent-dev openssl libssl-dev libsasl2-dev zlib1g zlib1g-dev libbz2-1.0 libglib2.0-0 libglib2.0-dev libjpeg-dev libpng-dev libkrb5-dev curl libcurl4-openssl-dev libpcre3-dev libpq-dev libpq5 gettext libxml2-dev libcap-dev ca-certificates psmisc patch git libc-ares-dev libicu-dev e2fsprogs libxslt1.1 libxslt1-dev xz-utils libexpat1-dev libtirpc-dev libsqlite3-dev libonig-dev lsof pkg-config libnuma-dev libwebp-dev gnutls-dev iproute2 gzip libpcre2-dev libtool-bin libreadline-dev libfcgi-dev libfreetype6-dev libgd-dev libpspell-dev "${runtime_packages[@]}")
+    for package in "${packages[@]}"; do
+        if apt-cache policy "${package}" 2>/dev/null | awk '/^Candidate:/ { found = ($2 != "(none)") } END { exit(found ? 0 : 1) }'; then
+            available_packages+=("${package}")
+        fi
+    done
+    if [ "${#available_packages[@]}" -gt 0 ]; then
+        apt-get --no-install-recommends install -y "${available_packages[@]}" || return 1
+    fi
 }
 
 Check_Download()
 {
     Echo_Blue "[+] Downloading files..."
     cd ${cur_dir}/src
-    # Use official GNU FTP for libiconv
-    Download_Files https://ftp.wayne.edu/gnu/libiconv/${Libiconv_Ver}.tar.gz ${Libiconv_Ver}.tar.gz
-    # Use GitHub mirror for libmcrypt from winlibs
-    Download_Files https://github.com/winlibs/libmcrypt/archive/refs/heads/master.tar.gz ${LibMcrypt_Ver}.tar.gz
-    if [ $? -ne 0 ]; then
-        # Try dogtopus repository which has libmcrypt 2.5.8
-        Download_Files https://github.com/dogtopus/obsolete-cryptography/raw/master/libmcrypt-2.5.8.tar.gz ${LibMcrypt_Ver}.tar.gz
+    Download_Files "${Download_Mirror}/libiconv/${Libiconv_Ver}.tar.gz" "${Libiconv_Ver}.tar.gz" || return 1
+    if [[ "${PHPSelect}" =~ ^[1-5]$ ]]; then
+        Download_Files "${Download_Mirror}/libmcrypt/${LibMcrypt_Ver}.tar.bz2" "${LibMcrypt_Ver}.tar.bz2" || return 1
+        Download_Files "${Download_Mirror}/mcrypt/${Mcypt_Ver}.tar.gz" "${Mcypt_Ver}.tar.gz" || return 1
+        Download_Files "${Download_Mirror}/mhash/${Mhash_Ver}.tar.bz2" "${Mhash_Ver}.tar.bz2" || return 1
     fi
-    if [ $? -ne 0 ]; then
-        Download_Files ${Download_Mirror}/lib/libmcrypt/${LibMcrypt_Ver}.tar.gz ${LibMcrypt_Ver}.tar.gz
-    fi
-    # Use official SourceForge for mcrypt
-    Download_Files https://sourceforge.net/projects/mcrypt/files/MCrypt/2.6.8/${Mcypt_Ver}.tar.gz/download ${Mcypt_Ver}.tar.gz
-    if [ $? -ne 0 ]; then
-        # Try GitHub mirror
-        Download_Files https://github.com/swenson/mcrypt/archive/refs/heads/master.tar.gz ${Mcypt_Ver}.tar.gz
-    fi
-    if [ $? -ne 0 ]; then
-        Download_Files ${Download_Mirror}/lib/mcrypt/${Mcypt_Ver}.tar.gz ${Mcypt_Ver}.tar.gz
-    fi
-    # Use official SourceForge for mhash
-    Download_Files https://sourceforge.net/projects/mhash/files/mhash/${Mhash_Ver##*-}/${Mhash_Ver}.tar.bz2/download ${Mhash_Ver}.tar.bz2
     if [ "${SelectMalloc}" = "2" ]; then
-        # Use GitHub for jemalloc
-        Download_Files https://github.com/jemalloc/jemalloc/releases/download/${Jemalloc_Ver##*-}/${Jemalloc_Ver}.tar.bz2 ${Jemalloc_Ver}.tar.bz2
+        Download_Files "https://github.com/jemalloc/jemalloc/releases/download/${Jemalloc_Ver##*-}/${Jemalloc_Ver}.tar.bz2" "${Jemalloc_Ver}.tar.bz2" || return 1
     elif [ "${SelectMalloc}" = "3" ]; then
-        # Use GitHub for gperftools (tcmalloc)
-        Download_Files https://github.com/gperftools/gperftools/releases/download/gperftools-${TCMalloc_Ver##*-}/${TCMalloc_Ver}.tar.gz ${TCMalloc_Ver}.tar.gz
-        # Use official GNU FTP for libunwind
-        Download_Files https://download.savannah.nongnu.org/releases/libunwind/${Libunwind_Ver}.tar.gz ${Libunwind_Ver}.tar.gz
+        Download_Files "https://github.com/gperftools/gperftools/releases/download/gperftools-${TCMalloc_Ver##*-}/${TCMalloc_Ver}.tar.gz" "${TCMalloc_Ver}.tar.gz" || return 1
+        Download_Files "https://download.savannah.nongnu.org/releases/libunwind/${Libunwind_Ver}.tar.gz" "${Libunwind_Ver}.tar.gz" || return 1
     fi
     if [ "${Stack}" != "lamp" ]; then
-        # Use official Nginx download
-        Download_Files https://nginx.org/download/${Nginx_Ver}.tar.gz ${Nginx_Ver}.tar.gz
+        if ! Download_Files "${University_Mirror}/macports/distfiles/nginx/${Nginx_Ver}.tar.gz" "${Nginx_Ver}.tar.gz"; then
+            Download_Files "https://nginx.org/download/${Nginx_Ver}.tar.gz" "${Nginx_Ver}.tar.gz" || return 1
+        fi
     fi
     if [[ "${DBSelect}" =~ ^[12345]$ ]]; then
         if [[ "${Bin}" = "y" && "${DBSelect}" =~ ^[2-4]$ ]]; then
@@ -498,19 +487,17 @@ Check_Download()
                 Download_Files https://cdn.mysql.com/archives/mysql-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz
             fi
         elif [[ "${Bin}" = "y" && "${DBSelect}" = "5" ]]; then
-            [[ "${DB_ARCH}" = "aarch64" ]] && mysql8_glibc_ver="2.17" || mysql8_glibc_ver="2.12"
-            [[ "${DB_ARCH}" = "aarch64" ]] && mysql8_ext="tar.gz" || mysql8_ext="tar.xz"
-            Download_Files https://cdn.mysql.com/Downloads/MySQL-8.0/${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext} ${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext}
-            if [ $? -ne 0 ]; then
-                Download_Files https://cdn.mysql.com/archives/mysql-8.0/${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext} ${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext}
+            mysql8_glibc_ver="2.28"
+            mysql8_ext="tar.xz"
+            mysql8_file="${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext}"
+            Download_Files "https://cdn.mysql.com/Downloads/MySQL-8.0/${mysql8_file}" "${mysql8_file}" || return 1
+            if [ "${Mysql_Ver}" = "mysql-8.0.46" ] && [ "${DB_ARCH}" = "x86_64" ]; then
+                echo "Verifying MySQL archive checksum..."
+                echo "367c6adbd976c0e4bcbe39bda4ea6ecf  ${mysql8_file}" | md5sum -c - || return 1
             fi
         else
-            # Use official MySQL download for source code
             Mysql_Ver_Short=$(echo ${Mysql_Ver} | sed 's/mysql-//' | cut -d. -f1-2)
-            Download_Files https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}.tar.gz ${Mysql_Ver}.tar.gz
-            if [ $? -ne 0 ]; then
-                Download_Files https://cdn.mysql.com/archives/mysql-${Mysql_Ver_Short}/${Mysql_Ver}.tar.gz ${Mysql_Ver}.tar.gz
-            fi
+            Download_Files "https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}.tar.gz" "${Mysql_Ver}.tar.gz" || return 1
         fi
     elif [[ "${DBSelect}" =~ ^[6789]|10$ ]]; then
         Mariadb_Version=$(echo ${Mariadb_Ver} | cut -d- -f2)
@@ -519,19 +506,16 @@ Check_Download()
         else
             MariaDB_FileName="${Mariadb_Ver}"
         fi
-        Download_Files https://downloads.mariadb.org/rest-api/mariadb/${Mariadb_Version}/${MariaDB_FileName}.tar.gz ${MariaDB_FileName}.tar.gz
+        Download_Files "https://downloads.mariadb.org/rest-api/mariadb/${Mariadb_Version}/${MariaDB_FileName}.tar.gz" "${MariaDB_FileName}.tar.gz" || return 1
     fi
-    # Use official PHP download
-    Download_Files https://www.php.net/distributions/${Php_Ver}.tar.bz2 ${Php_Ver}.tar.bz2
-    if [ $? -ne 0 ]; then
-        Download_Files http://museum.php.net/php5/${Php_Ver}.tar.bz2 ${Php_Ver}.tar.bz2
+    if ! Download_Files "${University_Mirror}/php/distributions/${Php_Ver}.tar.bz2" "${Php_Ver}.tar.bz2"; then
+        Download_Files "https://www.php.net/distributions/${Php_Ver}.tar.bz2" "${Php_Ver}.tar.bz2" || return 1
     fi
     # Note: PHP-FPM patch no longer needed for PHP 7+
-    # Use official phpMyAdmin download - correct path structure
-    Download_Files https://files.phpmyadmin.net/phpMyAdmin/${PhpMyAdmin_Ver##*-}/${PhpMyAdmin_Ver}.tar.xz ${PhpMyAdmin_Ver}.tar.xz
-    if [ $? -ne 0 ]; then
-        # Try GitHub releases as backup
-        Download_Files https://github.com/phpmyadmin/phpmyadmin/releases/download/RELEASE_${PhpMyAdmin_Ver##*-}_${PhpMyAdmin_Ver##*-}/${PhpMyAdmin_Ver}.tar.xz ${PhpMyAdmin_Ver}.tar.xz
+    PhpMyAdmin_Version="${PhpMyAdmin_Ver#phpMyAdmin-}"
+    PhpMyAdmin_Version="${PhpMyAdmin_Version%%-*}"
+    if ! Download_Files "https://files.phpmyadmin.net/phpMyAdmin/${PhpMyAdmin_Version}/${PhpMyAdmin_Ver}.tar.xz" "${PhpMyAdmin_Ver}.tar.xz"; then
+        Download_Files "https://github.com/phpmyadmin/phpmyadmin/releases/download/RELEASE_${PhpMyAdmin_Version//./_}/${PhpMyAdmin_Ver}.tar.xz" "${PhpMyAdmin_Ver}.tar.xz" || return 1
     fi
     # Skip probe file download for security
     echo "Note: Probe file download skipped for security reasons"
@@ -545,18 +529,22 @@ Check_Download()
 
 Make_Install()
 {
-    make -j `grep 'processor' /proc/cpuinfo | wc -l`
-    if [ $? -ne 0 ]; then
-        make
+    local jobs
+    jobs=$(grep -c '^processor' /proc/cpuinfo)
+    [ "${jobs}" -gt 0 ] || jobs=1
+    if ! make -j "${jobs}"; then
+        make || return 1
     fi
     make install
 }
 
 PHP_Make_Install()
 {
-    make ZEND_EXTRA_LIBS='-liconv' -j `grep 'processor' /proc/cpuinfo | wc -l`
-    if [ $? -ne 0 ]; then
-        make ZEND_EXTRA_LIBS='-liconv'
+    local jobs
+    jobs=$(grep -c '^processor' /proc/cpuinfo)
+    [ "${jobs}" -gt 0 ] || jobs=1
+    if ! make ZEND_EXTRA_LIBS='-liconv' -j "${jobs}"; then
+        make ZEND_EXTRA_LIBS='-liconv' || return 1
     fi
     make install
 }
@@ -576,80 +564,74 @@ Install_Autoconf()
 Install_Libiconv()
 {
     Echo_Blue "[+] Installing ${Libiconv_Ver}"
-    Tar_Cd ${Libiconv_Ver}.tar.gz ${Libiconv_Ver}
-    ./configure --enable-static
-    Make_Install
-    cd ${cur_dir}/src/
-    rm -rf ${cur_dir}/src/${Libiconv_Ver}
+    Tar_Cd "${Libiconv_Ver}.tar.gz" "${Libiconv_Ver}" || return 1
+    ./configure --disable-shared --enable-static || return 1
+    Make_Install || return 1
+    cd "${cur_dir}/src/" || return 1
+    rm -rf -- "${cur_dir}/src/${Libiconv_Ver}"
 }
 
 Install_Libmcrypt()
 {
     Echo_Blue "[+] Installing ${LibMcrypt_Ver}"
-    Tar_Cd ${LibMcrypt_Ver}.tar.gz ${LibMcrypt_Ver}
-    ./configure
-    Make_Install
-    /sbin/ldconfig
-    cd libltdl/
-    ./configure --enable-ltdl-install
-    Make_Install
+    Tar_Cd "${LibMcrypt_Ver}.tar.bz2" "${LibMcrypt_Ver}" || return 1
+    ./configure || return 1
+    Make_Install || return 1
+    /sbin/ldconfig || return 1
+    cd libltdl/ || return 1
+    ./configure --enable-ltdl-install || return 1
+    Make_Install || return 1
     ln -sf /usr/local/lib/libmcrypt.la /usr/lib/libmcrypt.la
     ln -sf /usr/local/lib/libmcrypt.so /usr/lib/libmcrypt.so
     ln -sf /usr/local/lib/libmcrypt.so.4 /usr/lib/libmcrypt.so.4
     ln -sf /usr/local/lib/libmcrypt.so.4.4.8 /usr/lib/libmcrypt.so.4.4.8
-    ldconfig
-    cd ${cur_dir}/src/
-    rm -rf ${cur_dir}/src/${LibMcrypt_Ver}
+    ldconfig || return 1
+    cd "${cur_dir}/src/" || return 1
+    rm -rf -- "${cur_dir}/src/${LibMcrypt_Ver}"
 }
 
 Install_Mcrypt()
 {
     Echo_Blue "[+] Installing ${Mcypt_Ver}"
-    Tar_Cd ${Mcypt_Ver}.tar.gz ${Mcypt_Ver}
-    ./configure
-    Make_Install
-    cd ${cur_dir}/src/
-    rm -rf ${cur_dir}/src/${Mcypt_Ver}
+    Tar_Cd "${Mcypt_Ver}.tar.gz" "${Mcypt_Ver}" || return 1
+    ./configure || return 1
+    Make_Install || return 1
+    cd "${cur_dir}/src/" || return 1
+    rm -rf -- "${cur_dir}/src/${Mcypt_Ver}"
 }
 
 Install_Mhash()
 {
     Echo_Blue "[+] Installing ${Mhash_Ver}"
-    Tar_Cd ${Mhash_Ver}.tar.bz2 ${Mhash_Ver}
-    ./configure
-    Make_Install
+    Tar_Cd "${Mhash_Ver}.tar.bz2" "${Mhash_Ver}" || return 1
+    ./configure || return 1
+    Make_Install || return 1
     ln -sf /usr/local/lib/libmhash.a /usr/lib/libmhash.a
     ln -sf /usr/local/lib/libmhash.la /usr/lib/libmhash.la
     ln -sf /usr/local/lib/libmhash.so /usr/lib/libmhash.so
     ln -sf /usr/local/lib/libmhash.so.2 /usr/lib/libmhash.so.2
     ln -sf /usr/local/lib/libmhash.so.2.0.1 /usr/lib/libmhash.so.2.0.1
-    ldconfig
-    cd ${cur_dir}/src/
-    rm -rf ${cur_dir}/src/${Mhash_Ver}
+    ldconfig || return 1
+    cd "${cur_dir}/src/" || return 1
+    rm -rf -- "${cur_dir}/src/${Mhash_Ver}"
 }
 
 Install_Freetype()
 {
     if echo "${Ubuntu_Version}" | grep -Eqi "^1[89]\.|2[0-9]\." || echo "${Mint_Version}" | grep -Eqi "^19|2[0-9]" || echo "${Deepin_Version}" | grep -Eqi "^15\.[7-9]|15.1[0-9]|1[6-9]|2[0-9]" || echo "${Debian_Version}" | grep -Eqi "^9|1[0-9]" || echo "${Raspbian_Version}" | grep -Eqi "^9|1[0-9]" || echo "${Kali_Version}" | grep -Eqi "^202[0-9]" || echo "${UOS_Version}" | grep -Eqi "^2[0-9]" || echo "${CentOS_Version}" | grep -Eqi "^8|9" || echo "${RHEL_Version}" | grep -Eqi "^8|9" || echo "${Oracle_Version}" | grep -Eqi "^8|9" || echo "${Fedora_Version}" | grep -Eqi "^3[0-9]|29" || echo "${Rocky_Version}" | grep -Eqi "^8|9" || echo "${Alma_Version}" | grep -Eqi "^8|9" || echo "${openEuler_Version}" | grep -Eqi "^2[0-9]" || echo "${Anolis_Version}" | grep -Eqi "^8|9" || echo "${Kylin_Version}" | grep -Eqi "^V1[0-9]" || echo "${Amazon_Version}" | grep -Eqi "^202[3-9]" || echo "${OpenCloudOS_Version}" | grep -Eqi "^8|9|23"; then
-        # Use official SourceForge mirror for FreeType
-        Download_Files https://sourceforge.net/projects/freetype/files/freetype2/${Freetype_New_Ver##*-}/${Freetype_New_Ver}.tar.xz/download ${Freetype_New_Ver}.tar.xz
-        if [ $? -ne 0 ]; then
-            Download_Files ${Download_Mirror}/lib/freetype/${Freetype_New_Ver}.tar.xz ${Freetype_New_Ver}.tar.xz
+        if ! Download_Files "${Download_Mirror}/freetype/${Freetype_New_Ver}.tar.xz" "${Freetype_New_Ver}.tar.xz"; then
+            Download_Files "https://sourceforge.net/projects/freetype/files/freetype2/${Freetype_New_Ver##*-}/${Freetype_New_Ver}.tar.xz/download" "${Freetype_New_Ver}.tar.xz" || return 1
         fi
         Echo_Blue "[+] Installing ${Freetype_New_Ver}"
-        Tar_Cd ${Freetype_New_Ver}.tar.xz ${Freetype_New_Ver}
-        ./configure --prefix=/usr/local/freetype --enable-freetype-config
+        Tar_Cd "${Freetype_New_Ver}.tar.xz" "${Freetype_New_Ver}" || return 1
+        ./configure --prefix=/usr/local/freetype --enable-freetype-config || return 1
     else
-        # Use official SourceForge mirror for older FreeType
-        Download_Files https://sourceforge.net/projects/freetype/files/freetype2/${Freetype_Ver##*-}/${Freetype_Ver}.tar.bz2/download ${Freetype_Ver}.tar.bz2
-        if [ $? -ne 0 ]; then
-            Download_Files ${Download_Mirror}/lib/freetype/${Freetype_Ver}.tar.bz2 ${Freetype_Ver}.tar.bz2
-        fi
+        Download_Files "https://sourceforge.net/projects/freetype/files/freetype2/${Freetype_Ver##*-}/${Freetype_Ver}.tar.bz2/download" "${Freetype_Ver}.tar.bz2" || return 1
         Echo_Blue "[+] Installing ${Freetype_Ver}"
-        Tar_Cd ${Freetype_Ver}.tar.bz2 ${Freetype_Ver}
-        ./configure --prefix=/usr/local/freetype
+        Tar_Cd "${Freetype_Ver}.tar.bz2" "${Freetype_Ver}" || return 1
+        ./configure --prefix=/usr/local/freetype || return 1
     fi
-    Make_Install
+    Make_Install || return 1
 
     [[ -d /usr/lib/pkgconfig ]] && \cp /usr/local/freetype/lib/pkgconfig/freetype2.pc /usr/lib/pkgconfig/
     cat > /etc/ld.so.conf.d/freetype.conf<<EOF
@@ -657,8 +639,8 @@ Install_Freetype()
 EOF
     ldconfig
     ln -sf /usr/local/freetype/include/freetype2/* /usr/include/
-    cd ${cur_dir}/src/
-    rm -rf ${cur_dir}/src/${Freetype_Ver}
+    cd "${cur_dir}/src/" || return 1
+    rm -rf -- "${cur_dir}/src/${Freetype_Ver}" "${cur_dir}/src/${Freetype_New_Ver}"
 }
 
 Install_Curl()
@@ -686,23 +668,14 @@ Install_Pcre()
     if ! command -v pcre-config >/dev/null 2>&1 || pcre-config --version | grep -vEqi '^8.'; then
         Echo_Blue "[+] Installing ${Pcre_Ver}"
         cd ${cur_dir}/src
-        # Try university mirrors first for better reliability
-        Download_Files http://ftp.cs.stanford.edu/pub/exim/pcre/${Pcre_Ver}.tar.bz2 ${Pcre_Ver}.tar.bz2
-        if [ $? -ne 0 ]; then
-            # Use direct SourceForge download link
-            Download_Files https://yer.dl.sourceforge.net/project/pcre/pcre/8.44/${Pcre_Ver}.tar.bz2 ${Pcre_Ver}.tar.bz2
+        # Use the verified university mirror for PCRE.
+        Download_Files "${Download_Mirror}/pcre/${Pcre_Ver}.tar.bz2" "${Pcre_Ver}.tar.bz2" || return 1
+        if [ ! -s "${Pcre_Ver}.tar.bz2" ]; then
+            return 1
         fi
-        if [ $? -ne 0 ]; then
-            # Try Exim FTP mirror
-            Download_Files https://ftp.exim.org/pub/pcre/${Pcre_Ver}.tar.bz2 ${Pcre_Ver}.tar.bz2
-        fi
-        if [ $? -ne 0 ]; then
-            # Try backup mirror 
-            Download_Files ${Download_Mirror}/lib/pcre/${Pcre_Ver}.tar.bz2 ${Pcre_Ver}.tar.bz2
-        fi
-        Tar_Cd ${Pcre_Ver}.tar.bz2 ${Pcre_Ver}
-        ./configure --disable-shared --enable-utf8 --enable-unicode-properties --enable-jit
-        make
+        Tar_Cd "${Pcre_Ver}.tar.bz2" "${Pcre_Ver}" || return 1
+        ./configure --disable-shared --enable-utf8 --enable-unicode-properties --enable-jit || return 1
+        make || return 1
         cd ${cur_dir}/src
         Nginx_With_Pcre="--with-pcre=${cur_dir}/src/${Pcre_Ver} --with-pcre-jit"
     fi

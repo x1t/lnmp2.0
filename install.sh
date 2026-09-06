@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 export PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+set -o pipefail
 
 # Check if user is root
 if [ $(id -u) != "0" ]; then
@@ -60,105 +61,111 @@ Init_Install()
     Print_APP_Ver
     Get_Dist_Version
     Print_Sys_Info
-    Check_Hosts
-    Check_CMPT
+    Check_Hosts || return 1
+    Check_CMPT || return 1
     if [ "${CheckMirror}" != "n" ]; then
-        Modify_Source
-        Check_Mirror
+        Modify_Source || return 1
+        Check_Mirror || return 1
     fi
-    Add_Swap
-    Set_Timezone
+    Add_Swap || return 1
+    Set_Timezone || return 1
     if [ "$PM" = "yum" ]; then
-        CentOS_InstallNTP
-        CentOS_RemoveAMP
-        CentOS_Dependent
+        CentOS_InstallNTP || return 1
+        CentOS_RemoveAMP || return 1
+        CentOS_Dependent || return 1
     elif [ "$PM" = "apt" ]; then
-        Deb_InstallNTP
-        Xen_Hwcap_Setting
-        Deb_RemoveAMP
-        Deb_Dependent
+        Deb_InstallNTP || return 1
+        Xen_Hwcap_Setting || return 1
+        Deb_RemoveAMP || return 1
+        Deb_Dependent || return 1
     fi
-    Disable_Selinux
-    Check_Download
-    Install_Libiconv
-    Install_Libmcrypt
-    Install_Mhash
-    Install_Mcrypt
-    Install_Freetype
-    Install_Pcre
-    Install_Icu4c
+    Disable_Selinux || return 1
+    Check_Download || return 1
+    Install_Libiconv || return 1
+    if [[ "${PHPSelect}" =~ ^[1-5]$ ]]; then
+        Install_Libmcrypt || return 1
+        Install_Mhash || return 1
+        Install_Mcrypt || return 1
+    else
+        echo "Skipping legacy libmcrypt/mhash/mcrypt builds for PHP ${Php_Ver}."
+    fi
+    Install_Freetype || return 1
+    Install_Pcre || return 1
+    Install_Icu4c || return 1
     if [ "${SelectMalloc}" = "2" ]; then
-        Install_Jemalloc
+        Install_Jemalloc || return 1
     elif [ "${SelectMalloc}" = "3" ]; then
-        Install_TCMalloc
+        Install_TCMalloc || return 1
     fi
     if [ "$PM" = "yum" ]; then
-        CentOS_Lib_Opt
+        CentOS_Lib_Opt || return 1
     elif [ "$PM" = "apt" ]; then
-        Deb_Lib_Opt
+        Deb_Lib_Opt || return 1
     fi
     if [ "${DBSelect}" = "1" ]; then
-        Install_MySQL_51
+        Install_MySQL_51 || return 1
     elif [ "${DBSelect}" = "2" ]; then
-        Install_MySQL_55
+        Install_MySQL_55 || return 1
     elif [ "${DBSelect}" = "3" ]; then
-        Install_MySQL_56
+        Install_MySQL_56 || return 1
     elif [ "${DBSelect}" = "4" ]; then
-        Install_MySQL_57
+        Install_MySQL_57 || return 1
     elif [ "${DBSelect}" = "5" ]; then
-        Install_MySQL_80
+        Install_MySQL_80 || return 1
     elif [ "${DBSelect}" = "6" ]; then
-        Install_MariaDB_5
+        Install_MariaDB_5 || return 1
     elif [ "${DBSelect}" = "7" ]; then
-        Install_MariaDB_103
+        Install_MariaDB_103 || return 1
     elif [ "${DBSelect}" = "8" ]; then
-        Install_MariaDB_104
+        Install_MariaDB_104 || return 1
     elif [ "${DBSelect}" = "9" ]; then
-        Install_MariaDB_105
+        Install_MariaDB_105 || return 1
     elif [ "${DBSelect}" = "10" ]; then
-        Install_MariaDB_106
+        Install_MariaDB_106 || return 1
     fi
-    TempMycnf_Clean
-    Clean_DB_Src_Dir
-    Check_PHP_Option
+    TempMycnf_Clean || return 1
+    Clean_DB_Src_Dir || return 1
+    Check_PHP_Option || return 1
 }
 
 Install_PHP()
 {
     if [ "${PHPSelect}" = "1" ]; then
-        Install_PHP_7
+        Install_PHP_7 || return 1
     elif [ "${PHPSelect}" = "2" ]; then
-        Install_PHP_71
+        Install_PHP_71 || return 1
     elif [ "${PHPSelect}" = "3" ]; then
-        Install_PHP_72
+        Install_PHP_72 || return 1
     elif [ "${PHPSelect}" = "4" ]; then
-        Install_PHP_73
+        Install_PHP_73 || return 1
     elif [ "${PHPSelect}" = "5" ]; then
-        Install_PHP_74
+        Install_PHP_74 || return 1
     elif [ "${PHPSelect}" = "6" ]; then
-        Install_PHP_80
+        Install_PHP_80 || return 1
     elif [ "${PHPSelect}" = "7" ]; then
-        Install_PHP_81
+        Install_PHP_81 || return 1
     elif [ "${PHPSelect}" = "8" ]; then
-        Install_PHP_82
+        Install_PHP_82 || return 1
     elif [ "${PHPSelect}" = "9" ]; then
-        Install_PHP_83
+        Install_PHP_83 || return 1
     elif [ "${PHPSelect}" = "10" ]; then
-        Install_PHP_84
+        Install_PHP_84 || return 1
+    elif [ "${PHPSelect}" = "11" ]; then
+        Install_PHP_85 || return 1
     fi
     Clean_PHP_Src_Dir
 }
 
 LNMP_Stack()
 {
-    Init_Install
-    Install_PHP
-    LNMP_PHP_Opt
-    Install_Nginx
-    Creat_PHP_Tools
-    Add_Iptables_Rules
-    Add_LNMP_Startup
-    Check_LNMP_Install
+    Init_Install || return 1
+    Install_PHP || return 1
+    LNMP_PHP_Opt || return 1
+    Install_Nginx || return 1
+    Creat_PHP_Tools || return 1
+    Add_Iptables_Rules || return 1
+    Add_LNMP_Startup || return 1
+    Check_LNMP_Install || return 1
 }
 
 LNMPA_Stack()
@@ -194,32 +201,40 @@ LAMP_Stack()
     Check_LAMP_Install
 }
 
+install_status=0
 case "${Stack}" in
     lnmp)
         Dispaly_Selection
         LNMP_Stack 2>&1 | tee ./lnmp-install.log
+        install_status=${PIPESTATUS[0]}
         ;;
     lnmpa)
         Dispaly_Selection
         LNMPA_Stack 2>&1 | tee ./lnmp-install.log
+        install_status=${PIPESTATUS[0]}
         ;;
     lamp)
         Dispaly_Selection
         LAMP_Stack 2>&1 | tee ./lnmp-install.log
+        install_status=${PIPESTATUS[0]}
         ;;
     nginx)
         Install_Only_Nginx 2>&1 | tee /root/nginx-install.log
+        install_status=${PIPESTATUS[0]}
         ;;
     db)
         Install_Only_Database
+        install_status=$?
         ;;
     mphp)
         Install_Multiplephp
+        install_status=$?
         ;;
     *)
         Echo_Red "Usage: $0 {lnmp|lnmpa|lamp}"
         Echo_Red "Usage: $0 {nginx|db|mphp}"
+        install_status=1
         ;;
 esac
 
-exit
+exit "${install_status}"

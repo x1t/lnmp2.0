@@ -192,8 +192,12 @@ Ln_PHP_Bin()
 {
     ln -sf /usr/local/php/bin/php /usr/bin/php
     ln -sf /usr/local/php/bin/phpize /usr/bin/phpize
-    ln -sf /usr/local/php/bin/pear /usr/bin/pear
-    ln -sf /usr/local/php/bin/pecl /usr/bin/pecl
+    if [ -x /usr/local/php/bin/pear ]; then
+        ln -sf /usr/local/php/bin/pear /usr/bin/pear
+    fi
+    if [ -x /usr/local/php/bin/pecl ]; then
+        ln -sf /usr/local/php/bin/pecl /usr/bin/pecl
+    fi
     if [ "${Stack}" = "lnmp" ]; then
         ln -sf /usr/local/php/sbin/php-fpm /usr/bin/php-fpm
     fi
@@ -211,29 +215,16 @@ Install_Composer()
     if [ "${CheckMirror}" != "n" ]; then
         echo "Downloading Composer..."
         if echo "${PHPSelect}" | grep -Eqi '^[1-3]$' || echo "${php_version}" | grep -Eqi '^5.[2-6].*|7.[0-2].*' || echo "${Php_Ver}" | grep -Eqi "php-5.[2-6].*|php-7.[0-2].*"; then
-            wget --progress=dot:giga --prefer-family=IPv4 --no-check-certificate -T 120 -t3 ${Download_Mirror}/web/php/composer/composer-2.2.phar -O /usr/local/bin/composer
-            if [ $? -eq 0 ]; then
-                echo "Composer install successfully."
-                chmod +x /usr/local/bin/composer
-            else
-                echo "Composer install failed, try to from composer official website..."
-                curl -sS --connect-timeout 30 -m 60 https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer --2.2
-                if [ $? -eq 0 ]; then
-                    echo "Composer install successfully."
-                fi
-            fi
+            composer_url="https://getcomposer.org/download/2.2.26/composer.phar"
         else
-            wget --progress=dot:giga --prefer-family=IPv4 --no-check-certificate -T 120 -t3 https://mirrors.aliyun.com/composer/composer.phar -O /usr/local/bin/composer
-            if [ $? -eq 0 ]; then
-                echo "Composer install successfully."
-                chmod +x /usr/local/bin/composer
-            else
-                echo "Composer install failed, try to from composer official website..."
-                curl -sS --connect-timeout 30 -m 60 https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
-                if [ $? -eq 0 ]; then
-                    echo "Composer install successfully."
-                fi
-            fi
+            composer_url="https://getcomposer.org/download/latest-stable/composer.phar"
+        fi
+        if wget --progress=dot:giga --prefer-family=IPv4 -T 120 -t3 "${composer_url}" -O /usr/local/bin/composer; then
+            chmod +x /usr/local/bin/composer
+            echo "Composer install successfully."
+        else
+            echo "Composer install failed."
+            return 1
         fi
         #if [ "${country}" = "CN" ]; then
             #composer config -g repo.packagist composer https://mirrors.aliyun.com/composer/
@@ -916,22 +907,28 @@ fi
 
 Install_PHP_84()
 {
-    Install_Libzip
+    Install_Libzip || return 1
     Echo_Blue "[+] Installing ${Php_Ver}"
-    Tar_Cd ${Php_Ver}.tar.bz2 ${Php_Ver}
+    Tar_Cd "${Php_Ver}.tar.bz2" "${Php_Ver}" || return 1
+    # PHP 8.5.6 passes an unsigned-int protocol mask to libcurl's long option.
+    # libcurl 8.14+ diagnoses that mismatch during compilation, so keep the
+    # value's intended CURLOPT_PROTOCOLS type explicit for current toolchains.
+    if grep -q 'curl_easy_setopt(ch->cp, CURLOPT_PROTOCOLS, CURLPROTO_ALL & ~CURLPROTO_FILE);' ext/curl/interface.c; then
+        sed -i 's/curl_easy_setopt(ch->cp, CURLOPT_PROTOCOLS, CURLPROTO_ALL & ~CURLPROTO_FILE);/curl_easy_setopt(ch->cp, CURLOPT_PROTOCOLS, (long)(CURLPROTO_ALL \& ~CURLPROTO_FILE));/' ext/curl/interface.c || return 1
+    fi
     if [ "${Stack}" = "lnmp" ]; then
-        ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --enable-fpm --with-fpm-user=www --with-fpm-group=www --enable-mysqlnd --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv=/usr/local --with-freetype=/usr/local/freetype --with-jpeg --with-zlib --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem ${with_curl} --enable-mbregex --enable-mbstring --enable-intl --enable-pcntl --enable-ftp --enable-gd ${with_openssl} --enable-pcntl --enable-sockets --with-zip --enable-soap --with-gettext ${with_fileinfo} --enable-opcache --with-xsl --with-pear --with-webp ${PHP_Buildin_Option} ${PHP_Modules_Options}
+        ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --enable-fpm --with-fpm-user=www --with-fpm-group=www --enable-mysqlnd --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv=/usr/local --with-freetype=/usr/local/freetype --with-jpeg --with-zlib --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem ${with_curl} --enable-mbregex --enable-mbstring --enable-intl --enable-pcntl --enable-ftp --enable-gd ${with_openssl} --enable-pcntl --enable-sockets --with-zip --enable-soap --with-gettext ${with_fileinfo} --with-xsl --with-webp ${PHP_Buildin_Option} ${PHP_Modules_Options} || return 1
     else
-        ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --with-apxs2=/usr/local/apache/bin/apxs --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv=/usr/local --with-freetype=/usr/local/freetype --with-jpeg --with-zlib --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem ${with_curl} --enable-mbregex --enable-mbstring --enable-intl --enable-pcntl --enable-ftp --enable-gd ${with_openssl} --enable-pcntl --enable-sockets --with-zip --enable-soap --with-gettext ${with_fileinfo} --enable-opcache --with-xsl --with-pear --with-webp ${PHP_Buildin_Option} ${PHP_Modules_Options}
+        ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --with-apxs2=/usr/local/apache/bin/apxs --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv=/usr/local --with-freetype=/usr/local/freetype --with-jpeg --with-zlib --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem ${with_curl} --enable-mbregex --enable-mbstring --enable-intl --enable-pcntl --enable-ftp --enable-gd ${with_openssl} --enable-pcntl --enable-sockets --with-zip --enable-soap --with-gettext ${with_fileinfo} --with-xsl --with-webp ${PHP_Buildin_Option} ${PHP_Modules_Options} || return 1
     fi
 
-    PHP_Make_Install
+    PHP_Make_Install || return 1
 
-    Ln_PHP_Bin
+    Ln_PHP_Bin || return 1
 
     echo "Copy new php configure file..."
-    mkdir -p /usr/local/php/{etc,conf.d}
-    \cp php.ini-production /usr/local/php/etc/php.ini
+    mkdir -p /usr/local/php/etc /usr/local/php/conf.d /usr/local/php/var/run /usr/local/php/var/log || return 1
+    \cp php.ini-production /usr/local/php/etc/php.ini || return 1
 
     # php extensions
     echo "Modify php.ini......"
@@ -942,12 +939,10 @@ Install_PHP_84()
     sed -i 's/;cgi.fix_pathinfo=.*/cgi.fix_pathinfo=0/g' /usr/local/php/etc/php.ini
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
-    Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
-    cd ${cur_dir}/src
-    echo "Install ZendGuardLoader for PHP 8.4..."
-    echo "unavailable now."
+    cd "${cur_dir}/src" || return 1
+    echo "ZendGuardLoader is not available for ${Php_Ver}."
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -979,10 +974,15 @@ slowlog = var/log/slow.log
 EOF
 
     echo "Copy php-fpm init.d file..."
-    \cp ${cur_dir}/src/${Php_Ver}/sapi/fpm/init.d.php-fpm /etc/init.d/php-fpm
-    \cp ${cur_dir}/init.d/php-fpm.service /etc/systemd/system/php-fpm.service
-    chmod +x /etc/init.d/php-fpm
+    \cp "${cur_dir}/src/${Php_Ver}/sapi/fpm/init.d.php-fpm" /etc/init.d/php-fpm || return 1
+    \cp "${cur_dir}/init.d/php-fpm.service" /etc/systemd/system/php-fpm.service || return 1
+    chmod +x /etc/init.d/php-fpm || return 1
 fi
+}
+
+Install_PHP_85()
+{
+    Install_PHP_84
 }
 
 LNMP_PHP_Opt()
@@ -1013,32 +1013,42 @@ LNMP_PHP_Opt()
 Creat_PHP_Tools()
 {
     echo "Create PHP Info Tool..."
-    cat >${Default_Website_Dir}/phpinfo.php<<eof
+    cat >"${Default_Website_Dir}/phpinfo.php"<<eof
 <?php
 phpinfo();
 ?>
 eof
 
-    echo "Copy PHP Prober..."
-    cd ${cur_dir}/src
-    tar zxf p.tar.gz
-    \cp p.php ${Default_Website_Dir}/p.php
+    echo "Probe tool download is disabled; skipping probe installation."
 
-    \cp ${cur_dir}/conf/index.html ${Default_Website_Dir}/index.html
-    \cp ${cur_dir}/conf/lnmp.gif ${Default_Website_Dir}/lnmp.gif
+    \cp "${cur_dir}/conf/index.html" "${Default_Website_Dir}/index.html" || return 1
+    \cp "${cur_dir}/conf/lnmp.gif" "${Default_Website_Dir}/lnmp.gif" || return 1
 
     if [ ${PHPSelect} -ge 1 ]; then
         echo "Copy Opcache Control Panel..."
-        \cp ${cur_dir}/conf/ocp.php ${Default_Website_Dir}/ocp.php
+        \cp "${cur_dir}/conf/ocp.php" "${Default_Website_Dir}/ocp.php" || return 1
     fi
     echo "============================Install PHPMyAdmin================================="
-    [[ -d ${Default_Website_Dir}/phpmyadmin ]] && rm -rf ${Default_Website_Dir}/phpmyadmin
-    tar Jxf ${PhpMyAdmin_Ver}.tar.xz
-    mv ${PhpMyAdmin_Ver} ${Default_Website_Dir}/phpmyadmin
-    \cp ${cur_dir}/conf/config.inc.php ${Default_Website_Dir}/phpmyadmin/config.inc.php
-    sed -i 's/LNMPORG/LNMP.org_'`date +%s%N | head -c 13`'_VPSer.net/g' ${Default_Website_Dir}/phpmyadmin/config.inc.php
-    mkdir ${Default_Website_Dir}/phpmyadmin/{upload,save}
-    chmod 755 -R ${Default_Website_Dir}/phpmyadmin/
-    chown www:www -R ${Default_Website_Dir}/phpmyadmin/
+    cd "${cur_dir}/src" || return 1
+    if [ ! -s "${PhpMyAdmin_Ver}.tar.xz" ]; then
+        echo "phpMyAdmin archive is missing: ${PhpMyAdmin_Ver}.tar.xz" >&2
+        return 1
+    fi
+    if [ -d "${Default_Website_Dir}/phpmyadmin" ]; then
+        rm -rf -- "${Default_Website_Dir}/phpmyadmin" || return 1
+    fi
+    tar Jxf "${PhpMyAdmin_Ver}.tar.xz" || return 1
+    if [ ! -d "${PhpMyAdmin_Ver}" ]; then
+        echo "phpMyAdmin archive did not contain the expected directory." >&2
+        return 1
+    fi
+    mv "${PhpMyAdmin_Ver}" "${Default_Website_Dir}/phpmyadmin" || return 1
+    \cp "${cur_dir}/conf/config.inc.php" "${Default_Website_Dir}/phpmyadmin/config.inc.php" || return 1
+    local blowfish_secret
+    blowfish_secret=$(openssl rand -hex 16) || return 1
+    sed -i "s/LNMPORG/${blowfish_secret}/g" "${Default_Website_Dir}/phpmyadmin/config.inc.php" || return 1
+    mkdir -p "${Default_Website_Dir}/phpmyadmin/upload" "${Default_Website_Dir}/phpmyadmin/save" || return 1
+    chmod 755 -R "${Default_Website_Dir}/phpmyadmin/" || return 1
+    chown www:www -R "${Default_Website_Dir}/phpmyadmin/" || return 1
     echo "============================phpMyAdmin install completed======================="
 }

@@ -2,6 +2,15 @@
 
 Install_Nginx_Openssl()
 {
+    Nginx_With_Openssl=''
+    Nginx_Version="${Nginx_Version:-${Nginx_Ver#nginx-}}"
+    if [ "${Enable_Nginx_Openssl}" != 'y' ]; then
+        return 0
+    fi
+    if command -v openssl >/dev/null 2>&1 && openssl version | grep -Eqi '^OpenSSL 3\.'; then
+        echo "Using the system OpenSSL 3 library for Nginx."
+        return 0
+    fi
     if [ "${Enable_Nginx_Openssl}" = 'y' ]; then
         if [ ! -n "${Nginx_Version}" ]; then
             Nginx_Version=$(echo ${Nginx_Ver} | sed "s/nginx-//")
@@ -9,21 +18,14 @@ Install_Nginx_Openssl()
         Nginx_Ver_Com=$(${cur_dir}/include/version_compare 1.13.0 ${Nginx_Version})
         if [[ "${Nginx_Ver_Com}" == "0" ||  "${Nginx_Ver_Com}" == "1" ]]; then
             # Use official OpenSSL source
-            Download_Files https://www.openssl.org/source/old/1.0.2/${Openssl_Ver}.tar.gz ${Openssl_Ver}.tar.gz
-            if [ $? -ne 0 ]; then
-                Download_Files ${Download_Mirror}/lib/openssl/${Openssl_Ver}.tar.gz ${Openssl_Ver}.tar.gz
-            fi
+            Download_Files "https://www.openssl.org/source/old/1.0.2/${Openssl_Ver}.tar.gz" "${Openssl_Ver}.tar.gz" || return 1
             [[ -d "${Openssl_Ver}" ]] && rm -rf ${Openssl_Ver}
-            tar zxf ${Openssl_Ver}.tar.gz
+            tar zxf "${Openssl_Ver}.tar.gz" || return 1
             Nginx_With_Openssl="--with-openssl=${cur_dir}/src/${Openssl_Ver}"
         else
-            # Use official OpenSSL source
-            Download_Files https://www.openssl.org/source/old/1.1.1/${Openssl_New_Ver}.tar.gz ${Openssl_New_Ver}.tar.gz
-            if [ $? -ne 0 ]; then
-                Download_Files ${Download_Mirror}/lib/openssl/${Openssl_New_Ver}.tar.gz ${Openssl_New_Ver}.tar.gz
-            fi
+            Download_Files "https://www.openssl.org/source/old/1.1.1/${Openssl_New_Ver}.tar.gz" "${Openssl_New_Ver}.tar.gz" || return 1
             [[ -d "${Openssl_New_Ver}" ]] && rm -rf ${Openssl_New_Ver}
-            tar zxf ${Openssl_New_Ver}.tar.gz
+            tar zxf "${Openssl_New_Ver}.tar.gz" || return 1
             Nginx_With_Openssl="--with-openssl=${cur_dir}/src/${Openssl_New_Ver} --with-openssl-opt='enable-weak-ssl-ciphers'"
         fi
     fi
@@ -104,14 +106,15 @@ Install_Ngx_FancyIndex()
 Install_Nginx()
 {
     Echo_Blue "[+] Installing ${Nginx_Ver}... "
-    groupadd www
-    useradd -s /sbin/nologin -g www www
+    Nginx_Version="${Nginx_Version:-${Nginx_Ver#nginx-}}"
+    getent group www >/dev/null 2>&1 || groupadd www || return 1
+    id www >/dev/null 2>&1 || useradd -s /sbin/nologin -g www www || return 1
 
-    cd ${cur_dir}/src
-    Install_Nginx_Openssl
-    Install_Nginx_Lua
-    Install_Ngx_FancyIndex
-    Tar_Cd ${Nginx_Ver}.tar.gz ${Nginx_Ver}
+    cd "${cur_dir}/src" || return 1
+    Install_Nginx_Openssl || return 1
+    Install_Nginx_Lua || return 1
+    Install_Ngx_FancyIndex || return 1
+    Tar_Cd "${Nginx_Ver}.tar.gz" "${Nginx_Ver}" || return 1
     if [[ "${DISTRO}" = "Fedora" && ${Fedora_Version} -ge 28 ]]; then
         patch -p1 < ${cur_dir}/src/patch/nginx-libxcrypt.patch
     fi
@@ -121,29 +124,29 @@ Install_Nginx()
     fi
     Nginx_Ver_Com=$(${cur_dir}/include/version_compare 1.9.4 ${Nginx_Version})
     if [[ "${Nginx_Ver_Com}" == "0" ||  "${Nginx_Ver_Com}" == "1" ]]; then
-        ./configure --user=www --group=www --prefix=/usr/local/nginx --with-http_stub_status_module --with-http_ssl_module --with-http_spdy_module --with-http_gzip_static_module --with-ipv6 --with-http_sub_module --with-http_realip_module ${Nginx_With_Openssl} ${Nginx_With_Pcre} ${Nginx_Module_Lua} ${NginxMAOpt} ${Ngx_FancyIndex} ${Nginx_Modules_Options}
+        ./configure --user=www --group=www --prefix=/usr/local/nginx --with-http_stub_status_module --with-http_ssl_module --with-http_spdy_module --with-http_gzip_static_module --with-ipv6 --with-http_sub_module --with-http_realip_module ${Nginx_With_Openssl} ${Nginx_With_Pcre} ${Nginx_Module_Lua} ${NginxMAOpt} ${Ngx_FancyIndex} ${Nginx_Modules_Options} || return 1
     else
-        ./configure --user=www --group=www --prefix=/usr/local/nginx --with-http_stub_status_module --with-http_ssl_module --with-http_v2_module --with-http_gzip_static_module --with-http_sub_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_realip_module ${Nginx_With_Openssl} ${Nginx_With_Pcre} ${Nginx_Module_Lua} ${NginxMAOpt} ${Ngx_FancyIndex} ${Nginx_Modules_Options}
+        ./configure --user=www --group=www --prefix=/usr/local/nginx --with-http_stub_status_module --with-http_ssl_module --with-http_v2_module --with-http_gzip_static_module --with-http_sub_module --with-stream --with-stream_ssl_module --with-stream_ssl_preread_module --with-http_realip_module ${Nginx_With_Openssl} ${Nginx_With_Pcre} ${Nginx_Module_Lua} ${NginxMAOpt} ${Ngx_FancyIndex} ${Nginx_Modules_Options} || return 1
     fi
-    Make_Install
-    cd ../
+    Make_Install || return 1
+    cd ../ || return 1
 
     ln -sf /usr/local/nginx/sbin/nginx /usr/bin/nginx
 
     rm -f /usr/local/nginx/conf/nginx.conf
-    cd ${cur_dir}
+    cd "${cur_dir}" || return 1
     if [ "${Stack}" = "lnmpa" ]; then
-        \cp conf/nginx_a.conf /usr/local/nginx/conf/nginx.conf
-        \cp conf/proxy.conf /usr/local/nginx/conf/proxy.conf
-        \cp conf/proxy-pass-php.conf /usr/local/nginx/conf/proxy-pass-php.conf
+        \cp conf/nginx_a.conf /usr/local/nginx/conf/nginx.conf || return 1
+        \cp conf/proxy.conf /usr/local/nginx/conf/proxy.conf || return 1
+        \cp conf/proxy-pass-php.conf /usr/local/nginx/conf/proxy-pass-php.conf || return 1
     else
-        \cp conf/nginx.conf /usr/local/nginx/conf/nginx.conf
+        \cp conf/nginx.conf /usr/local/nginx/conf/nginx.conf || return 1
     fi
-    \cp -ra conf/rewrite /usr/local/nginx/conf/
-    \cp conf/pathinfo.conf /usr/local/nginx/conf/pathinfo.conf
-    \cp conf/enable-php.conf /usr/local/nginx/conf/enable-php.conf
-    \cp conf/enable-php-pathinfo.conf /usr/local/nginx/conf/enable-php-pathinfo.conf
-    \cp -ra conf/example /usr/local/nginx/conf/example
+    \cp -ra conf/rewrite /usr/local/nginx/conf/ || return 1
+    \cp conf/pathinfo.conf /usr/local/nginx/conf/pathinfo.conf || return 1
+    \cp conf/enable-php.conf /usr/local/nginx/conf/enable-php.conf || return 1
+    \cp conf/enable-php-pathinfo.conf /usr/local/nginx/conf/enable-php-pathinfo.conf || return 1
+    \cp -ra conf/example /usr/local/nginx/conf/example || return 1
     if [ "${Enable_Nginx_Lua}" = 'y' ]; then
         if ! grep -q 'lua_package_path "/usr/local/nginx/lib/lua/?.lua";' /usr/local/nginx/conf/nginx.conf; then
             sed -i "/server_tokens off;/i\        lua_package_path \"/usr/local/nginx/lib/lua/?.lua\";\n" /usr/local/nginx/conf/nginx.conf
@@ -158,36 +161,40 @@ Install_Nginx()
         sed -i "/gzip on;/i\        fastcgi_buffering off;\n" /usr/local/nginx/conf/nginx.conf
     fi
 
-    mkdir -p ${Default_Website_Dir}
-    chmod +w ${Default_Website_Dir}
-    mkdir -p /home/wwwlogs
-    chmod 777 /home/wwwlogs
+    mkdir -p "${Default_Website_Dir}" || return 1
+    chmod +w "${Default_Website_Dir}" || return 1
+    mkdir -p /home/wwwlogs || return 1
+    chmod 777 /home/wwwlogs || return 1
 
-    chown -R www:www ${Default_Website_Dir}
+    if [ -e "${Default_Website_Dir}/.user.ini" ]; then
+        chattr -i "${Default_Website_Dir}/.user.ini" 2>/dev/null || true
+    fi
+    chown -R www:www "${Default_Website_Dir}" || return 1
 
-    mkdir /usr/local/nginx/conf/vhost
+    mkdir -p /usr/local/nginx/conf/vhost || return 1
 
     if [ "${Default_Website_Dir}" != "/home/wwwroot/default" ]; then
         sed -i "s#/home/wwwroot/default#${Default_Website_Dir}#g" /usr/local/nginx/conf/nginx.conf
     fi
 
     if [ "${Stack}" = "lnmp" ]; then
-        cat >${Default_Website_Dir}/.user.ini<<EOF
+        chattr -i "${Default_Website_Dir}/.user.ini" 2>/dev/null || true
+        cat >"${Default_Website_Dir}/.user.ini"<<EOF
 open_basedir=${Default_Website_Dir}:/tmp/:/proc/
 EOF
-        chmod 644 ${Default_Website_Dir}/.user.ini
-        chattr +i ${Default_Website_Dir}/.user.ini
+        chmod 644 "${Default_Website_Dir}/.user.ini" || return 1
+        chattr +i ${Default_Website_Dir}/.user.ini 2>/dev/null || true
         cat >>/usr/local/nginx/conf/fastcgi.conf<<EOF
 fastcgi_param PHP_ADMIN_VALUE "open_basedir=\$document_root/:/tmp/:/proc/";
 EOF
     fi
 
-    \cp init.d/init.d.nginx /etc/init.d/nginx
-    \cp init.d/nginx.service /etc/systemd/system/nginx.service
-    chmod +x /etc/init.d/nginx
+    \cp init.d/init.d.nginx /etc/init.d/nginx || return 1
+    \cp init.d/nginx.service /etc/systemd/system/nginx.service || return 1
+    chmod +x /etc/init.d/nginx || return 1
 
     if [ "${SelectMalloc}" = "3" ]; then
-        mkdir /tmp/tcmalloc
+        mkdir -p /tmp/tcmalloc
         chown -R www:www /tmp/tcmalloc
         sed -i '/nginx.pid/a\
 google_perftools_profiles /tmp/tcmalloc;' /usr/local/nginx/conf/nginx.conf
@@ -200,4 +207,5 @@ google_perftools_profiles /tmp/tcmalloc;' /usr/local/nginx/conf/nginx.conf
             sed -i 's/listen 80 default_server;/listen 80 default_server reuseport;/g' /usr/local/nginx/conf/nginx.conf
         fi
     fi
+    /usr/local/nginx/sbin/nginx -t -c /usr/local/nginx/conf/nginx.conf || return 1
 }

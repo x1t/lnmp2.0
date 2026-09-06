@@ -38,24 +38,24 @@ Add_Iptables_Rules()
 Add_LNMP_Startup()
 {
     echo "Add Startup and Starting LNMP..."
-    \cp ${cur_dir}/conf/lnmp /bin/lnmp
-    chmod +x /bin/lnmp
-    StartUp nginx
-    StartOrStop start nginx
+    \cp "${cur_dir}/conf/lnmp" /bin/lnmp || return 1
+    chmod +x /bin/lnmp || return 1
+    StartUp nginx || return 1
+    StartOrStop start nginx || return 1
     if [[ "${DBSelect}" =~ ^[6789]|10$ ]]; then
-        StartUp mariadb
-        StartOrStop start mariadb
+        StartUp mariadb || return 1
+        StartOrStop start mariadb || return 1
         sed -i 's#/etc/init.d/mysql#/etc/init.d/mariadb#' /bin/lnmp
     elif [[ "${DBSelect}" =~ ^[12345]$ ]]; then
-        StartUp mysql
-        StartOrStop start mysql
+        StartUp mysql || return 1
+        StartOrStop start mysql || return 1
     elif [ "${DBSelect}" = "0" ]; then
-        sed -i 's#/etc/init.d/mysql.*##' /bin/lnmp
+        sed -i 's#/etc/init.d/mysql.*##' /bin/lnmp || return 1
     fi
-    StartUp php-fpm
-    StartOrStop start php-fpm
+    StartUp php-fpm || return 1
+    StartOrStop start php-fpm || return 1
     if [ "${PHPSelect}" = "1" ]; then
-        sed -i 's#/usr/local/php/var/run/php-fpm.pid#/usr/local/php/logs/php-fpm.pid#' /bin/lnmp
+        sed -i 's#/usr/local/php/var/run/php-fpm.pid#/usr/local/php/logs/php-fpm.pid#' /bin/lnmp || return 1
     fi
 }
 
@@ -99,12 +99,26 @@ Add_LAMP_Startup()
     fi
 }
 
+Service_Is_Active()
+{
+    local service="$1"
+    if command -v systemctl >/dev/null 2>&1 && [ -s "/etc/systemd/system/${service}.service" ]; then
+        systemctl is-active --quiet "${service}.service" && return 0
+    fi
+    if [ -x "/etc/init.d/${service}" ]; then
+        "/etc/init.d/${service}" status >/dev/null 2>&1 && return 0
+    fi
+    return 1
+}
+
 Check_Nginx_Files()
 {
     isNginx=""
     echo "============================== Check install =============================="
     echo "Checking ..."
-    if [[ -s /usr/local/nginx/conf/nginx.conf && -s /usr/local/nginx/sbin/nginx ]]; then
+    if [[ -s /usr/local/nginx/conf/nginx.conf && -s /usr/local/nginx/sbin/nginx ]] \
+        && /usr/local/nginx/sbin/nginx -t -c /usr/local/nginx/conf/nginx.conf >/dev/null 2>&1 \
+        && Service_Is_Active nginx; then
         Echo_Green "Nginx: OK"
         isNginx="ok"
     else
@@ -116,14 +130,16 @@ Check_DB_Files()
 {
     isDB=""
     if [[ "${DBSelect}" =~ ^[6789]|10$ ]]; then
-        if [[ -s /usr/local/mariadb/bin/mysql && -s /usr/local/mariadb/bin/mysqld_safe && -s /etc/my.cnf ]]; then
+        if [[ -s /usr/local/mariadb/bin/mysql && -s /usr/local/mariadb/bin/mysqld_safe && -s /etc/my.cnf ]] \
+            && Service_Is_Active mariadb; then
             Echo_Green "MariaDB: OK"
             isDB="ok"
         else
             Echo_Red "Error: MariaDB install failed."
         fi
     elif [[ "${DBSelect}" =~ ^[12345]$ ]]; then
-        if [[ -s /usr/local/mysql/bin/mysql && -s /usr/local/mysql/bin/mysqld_safe && -s /etc/my.cnf ]]; then
+        if [[ -s /usr/local/mysql/bin/mysql && -s /usr/local/mysql/bin/mysqld_safe && -s /etc/my.cnf ]] \
+            && Service_Is_Active mysql; then
             Echo_Green "MySQL: OK"
             isDB="ok"
         else
@@ -139,7 +155,9 @@ Check_PHP_Files()
 {
     isPHP=""
     if [ "${Stack}" = "lnmp" ]; then
-        if [[ -s /usr/local/php/sbin/php-fpm && -s /usr/local/php/etc/php.ini && -s /usr/local/php/bin/php ]]; then
+        if [[ -s /usr/local/php/sbin/php-fpm && -s /usr/local/php/etc/php.ini && -s /usr/local/php/bin/php ]] \
+            && /usr/local/php/sbin/php-fpm -y /usr/local/php/etc/php-fpm.conf -t >/dev/null 2>&1 \
+            && Service_Is_Active php-fpm; then
             Echo_Green "PHP: OK"
             Echo_Green "PHP-FPM: OK"
             isPHP="ok"
@@ -196,6 +214,7 @@ Clean_DB_Src_Dir()
     elif [[ "${DBSelect}" = "5" ]]; then
         [[ -d "${cur_dir}/src/${Boost_New_Ver}" ]] && rm -rf ${cur_dir}/src/${Boost_New_Ver}
     fi
+    return 0
 }
 
 Clean_PHP_Src_Dir()
@@ -221,6 +240,7 @@ Clean_Web_Src_Dir()
     [[ -d "${cur_dir}/src/${LuaNginxModule}" ]] && rm -rf ${cur_dir}/src/${LuaNginxModule}
     [[ -d "${cur_dir}/src/${NgxDevelKit}" ]] && rm -rf ${cur_dir}/src/${NgxDevelKit}
     [[ -d "${cur_dir}/src/${NgxFancyIndex_Ver}" ]] && rm -rf ${cur_dir}/src/${NgxFancyIndex_Ver}
+    return 0
 }
 
 Print_Sucess_Info()
@@ -235,7 +255,6 @@ Print_Sucess_Info()
     echo "+------------------------------------------------------------------------+"
     echo "|  phpMyAdmin: http://IP/phpmyadmin/                                     |"
     echo "|  phpinfo: http://IP/phpinfo.php                                        |"
-    echo "|  Prober:  http://IP/p.php                                              |"
     echo "+------------------------------------------------------------------------+"
     echo "|  Add VirtualHost: lnmp vhost add                                       |"
     echo "+------------------------------------------------------------------------+"
@@ -263,7 +282,8 @@ Print_Failed_Info()
     fi
     Echo_Red "Sorry, Failed to install LNMP!"
     Echo_Red "Please check project documentation or submit GitHub Issues for support."
-    Echo_Red "You can download /root/lnmp-install.log from your server,and upload lnmp-install.log to LNMP Forum."
+    Echo_Red "Please inspect /root/lnmp-install.log for the first failed command."
+    return 1
 }
 
 Check_LNMP_Install()
@@ -273,8 +293,10 @@ Check_LNMP_Install()
     Check_PHP_Files
     if [[ "${isNginx}" = "ok" && "${isDB}" = "ok" && "${isPHP}" = "ok" ]]; then
         Print_Sucess_Info
+        return 0
     else
         Print_Failed_Info
+        return 1
     fi
 }
 

@@ -20,27 +20,23 @@ MySQL_Gcc7_Patch()
 Check_MySQL_Dependencies()
 {
     Echo_Blue "[+] Checking MySQL runtime dependencies for Debian 13..."
-    
-    # Check for Debian 13 Trixie specific issues
     if [ "${DISTRO}" = "Debian" ] && echo "${Debian_Version}" | grep -Eqi "^13"; then
         echo "Detected Debian 13 Trixie, checking MySQL dependencies..."
-        
-        # Check if libaio1t64 is available, create compatibility links if needed
-        if [ ! -f /lib/x86_64-linux-gnu/libaio.so.1 ] && [ -f /lib/x86_64-linux-gnu/libaio.so.1t64 ]; then
-            echo "Creating libaio compatibility symlinks for MySQL..."
-            ln -sf /lib/x86_64-linux-gnu/libaio.so.1t64 /lib/x86_64-linux-gnu/libaio.so.1
-        fi
-        
-        # Check if libncurses5 compatibility is needed
-        if [ ! -f /lib/x86_64-linux-gnu/libncurses.so.5 ] && [ -f /lib/x86_64-linux-gnu/libncurses.so.6 ]; then
-            echo "Creating libncurses compatibility symlinks for MySQL client..."
-            ln -sf /lib/x86_64-linux-gnu/libncurses.so.6 /lib/x86_64-linux-gnu/libncurses.so.5
-            ln -sf /lib/x86_64-linux-gnu/libtinfo.so.6 /lib/x86_64-linux-gnu/libtinfo.so.5
-        fi
-        
-        # Update library cache
+        local libdir
+        for libdir in /lib/*-linux-gnu /usr/lib/*-linux-gnu; do
+            [ -d "${libdir}" ] || continue
+            if [ ! -e "${libdir}/libaio.so.1" ] && [ -f "${libdir}/libaio.so.1t64" ]; then
+                echo "Creating libaio compatibility link for MySQL..."
+                ln -sf "${libdir}/libaio.so.1t64" "${libdir}/libaio.so.1"
+            fi
+            if [ ! -e "${libdir}/libncurses.so.5" ] && [ -f "${libdir}/libncurses.so.6" ]; then
+                ln -sf "${libdir}/libncurses.so.6" "${libdir}/libncurses.so.5"
+            fi
+            if [ ! -e "${libdir}/libtinfo.so.5" ] && [ -f "${libdir}/libtinfo.so.6" ]; then
+                ln -sf "${libdir}/libtinfo.so.6" "${libdir}/libtinfo.so.5"
+            fi
+        done
         ldconfig
-        echo "MySQL dependency compatibility links created for Debian 13."
     fi
 }
 
@@ -51,16 +47,16 @@ MySQL_Sec_Setting()
     fi
 
     if [ -d "/etc/mysql" ]; then
-        mv /etc/mysql /etc/mysql.backup.$(date +%Y%m%d)
+        mv /etc/mysql "/etc/mysql.backup.$(date +%Y%m%d%H%M%S)"
     fi
 
     # Check and fix MySQL dependencies before starting
-    Check_MySQL_Dependencies
+    Check_MySQL_Dependencies || return 1
 
     if command -v systemctl >/dev/null 2>&1; then
-        systemctl enable mysql.service
+        systemctl enable mysql.service || return 1
     fi
-    /etc/init.d/mysql start
+    /etc/init.d/mysql start || return 1
 
     ln -sf /usr/local/mysql/bin/mysql /usr/bin/mysql
     ln -sf /usr/local/mysql/bin/mysqldump /usr/bin/mysqldump
@@ -68,64 +64,90 @@ MySQL_Sec_Setting()
     ln -sf /usr/local/mysql/bin/mysqld_safe /usr/bin/mysqld_safe
     ln -sf /usr/local/mysql/bin/mysqlcheck /usr/bin/mysqlcheck
 
-    /etc/init.d/mysql restart
+    /etc/init.d/mysql restart || return 1
     sleep 2
 
-    /usr/local/mysql/bin/mysqladmin -u root password "${DB_Root_Password}"
-    if [ $? -ne 0 ]; then
+    if [ "${DBSelect}" = "5" ]; then
+        local -a mysql_root_cmd
+        if [ -n "${MySQL_Temporary_Password:-}" ]; then
+            mysql_root_cmd=(env "MYSQL_PWD=${MySQL_Temporary_Password}" /usr/local/mysql/bin/mysql --connect-expired-password --protocol=socket -u root)
+        else
+            mysql_root_cmd=(/usr/local/mysql/bin/mysql --protocol=socket -u root)
+        fi
+        "${mysql_root_cmd[@]}" -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_Root_Password}';" || {
+            echo "failed, try other way..."
+            /etc/init.d/mysql restart || return 1
+            "${mysql_root_cmd[@]}" -e "SET PASSWORD FOR 'root'@'localhost' = '${DB_Root_Password}';" || return 1
+        }
+    elif ! /usr/local/mysql/bin/mysqladmin -u root password "${DB_Root_Password}"; then
         echo "failed, try other way..."
-        /etc/init.d/mysql restart
+        /etc/init.d/mysql restart || return 1
         cat >~/.emptymy.cnf<<EOF
 [client]
 user=root
 password=''
 EOF
         if [ "${DBSelect}" = "4" ] || echo "${mysql_version}" | grep -Eqi '^5.7.'; then
-            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('${DB_Root_Password}');"
-            [ $? -eq 0 ] && echo "Set password Sucessfully." || echo "Set password failed!"
+            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('${DB_Root_Password}');" || {
+                rm -f ~/.emptymy.cnf
+                return 1
+            }
         elif [ "${DBSelect}" = "5" ] || echo "${mysql_version}" | grep -Eqi '^8.0.'; then
-            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "SET PASSWORD FOR 'root'@'localhost' = '${DB_Root_Password}';"
-            [ $? -eq 0 ] && echo "Set password Sucessfully." || echo "Set password failed!"
+            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "SET PASSWORD FOR 'root'@'localhost' = '${DB_Root_Password}';" || {
+                rm -f ~/.emptymy.cnf
+                return 1
+            }
         else
-            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "UPDATE mysql.user SET Password=PASSWORD('${DB_Root_Password}') WHERE User='root';"
-            [ $? -eq 0 ] && echo "Set password Sucessfully." || echo "Set password failed!"
-            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "FLUSH PRIVILEGES;"
-            [ $? -eq 0 ] && echo "FLUSH PRIVILEGES Sucessfully." || echo "FLUSH PRIVILEGES failed!"
+            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "UPDATE mysql.user SET Password=PASSWORD('${DB_Root_Password}') WHERE User='root';" || {
+                rm -f ~/.emptymy.cnf
+                return 1
+            }
+            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "FLUSH PRIVILEGES;" || {
+                rm -f ~/.emptymy.cnf
+                return 1
+            }
         fi
         rm -f ~/.emptymy.cnf
     fi
-    /etc/init.d/mysql restart
+    /etc/init.d/mysql restart || return 1
 
     Make_TempMycnf "${DB_Root_Password}"
-    Do_Query ""
-    if [ $? -eq 0 ]; then
-        echo "OK, MySQL root password correct."
-    fi
+    Do_Query "" || return 1
+    echo "OK, MySQL root password correct."
     echo "Update root password..."
     if [ "${DBSelect}" = "4" ] || echo "${mysql_version}" | grep -Eqi '^5.7.'; then
-        Do_Query "UPDATE mysql.user SET authentication_string=PASSWORD('${DB_Root_Password}') WHERE User='root';"
+        Do_Query "UPDATE mysql.user SET authentication_string=PASSWORD('${DB_Root_Password}') WHERE User='root';" || return 1
     elif [ "${DBSelect}" = "5" ] || echo "${mysql_version}" | grep -Eqi '^8.0.'; then
-        Do_Query "SET PASSWORD FOR 'root'@'localhost' = '${DB_Root_Password}';"
+        Do_Query "SET PASSWORD FOR 'root'@'localhost' = '${DB_Root_Password}';" || return 1
     else
-        Do_Query "UPDATE mysql.user SET Password=PASSWORD('${DB_Root_Password}') WHERE User='root';"
+        Do_Query "UPDATE mysql.user SET Password=PASSWORD('${DB_Root_Password}') WHERE User='root';" || return 1
     fi
-    [ $? -eq 0 ] && echo " ... Success." || echo " ... Failed!"
+    echo " ... Success."
     echo "Remove anonymous users..."
-    Do_Query "DELETE FROM mysql.user WHERE User='';"
-    Do_Query "DROP USER ''@'%';"
-    [ $? -eq 0 ] && echo " ... Success." || echo " ... Failed!"
+    Do_Query "DELETE FROM mysql.user WHERE User='';" || return 1
+    echo " ... Success."
     echo "Disallow root login remotely..."
-    Do_Query "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
-    [ $? -eq 0 ] && echo " ... Success." || echo " ... Failed!"
+    Do_Query "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');" || return 1
+    echo " ... Success."
     echo "Remove test database..."
-    Do_Query "DROP DATABASE test;"
-    [ $? -eq 0 ] && echo " ... Success." || echo " ... Failed!"
+    Do_Query "DROP DATABASE IF EXISTS test;" || return 1
+    echo " ... Success."
     echo "Reload privilege tables..."
-    Do_Query "FLUSH PRIVILEGES;"
-    [ $? -eq 0 ] && echo " ... Success." || echo " ... Failed!"
+    Do_Query "FLUSH PRIVILEGES;" || return 1
+    echo " ... Success."
 
-    /etc/init.d/mysql restart
-    /etc/init.d/mysql stop
+    /etc/init.d/mysql restart || return 1
+    /etc/init.d/mysql stop || return 1
+}
+
+Set_MySQL_Redo_Log()
+{
+    local size="$1"
+    if [ "${DBSelect}" = "5" ]; then
+        sed -i "s#^innodb_redo_log_capacity.*#innodb_redo_log_capacity = ${size}#" /etc/my.cnf
+    else
+        sed -i "s#^innodb_log_file_size.*#innodb_log_file_size = ${size}#" /etc/my.cnf
+    fi
 }
 
 MySQL_Opt()
@@ -140,7 +162,7 @@ MySQL_Opt()
         sed -i "s#^query_cache_size.*#query_cache_size = 16M#" /etc/my.cnf
         sed -i "s#^tmp_table_size.*#tmp_table_size = 32M#" /etc/my.cnf
         sed -i "s#^innodb_buffer_pool_size.*#innodb_buffer_pool_size = 128M#" /etc/my.cnf
-        sed -i "s#^innodb_log_file_size.*#innodb_log_file_size = 32M#" /etc/my.cnf
+        Set_MySQL_Redo_Log 32M
         sed -i "s#^performance_schema_max_table_instances.*#performance_schema_max_table_instances = 1000#" /etc/my.cnf
     elif [[ ${MemTotal} -ge 2048 && ${MemTotal} -lt 4096 ]]; then
         sed -i "s#^key_buffer_size.*#key_buffer_size = 64M#" /etc/my.cnf
@@ -152,7 +174,7 @@ MySQL_Opt()
         sed -i "s#^query_cache_size.*#query_cache_size = 32M#" /etc/my.cnf
         sed -i "s#^tmp_table_size.*#tmp_table_size = 64M#" /etc/my.cnf
         sed -i "s#^innodb_buffer_pool_size.*#innodb_buffer_pool_size = 256M#" /etc/my.cnf
-        sed -i "s#^innodb_log_file_size.*#innodb_log_file_size = 64M#" /etc/my.cnf
+        Set_MySQL_Redo_Log 64M
         sed -i "s#^performance_schema_max_table_instances.*#performance_schema_max_table_instances = 2000#" /etc/my.cnf
     elif [[ ${MemTotal} -ge 4096 && ${MemTotal} -lt 8192 ]]; then
         sed -i "s#^key_buffer_size.*#key_buffer_size = 128M#" /etc/my.cnf
@@ -164,7 +186,7 @@ MySQL_Opt()
         sed -i "s#^query_cache_size.*#query_cache_size = 64M#" /etc/my.cnf
         sed -i "s#^tmp_table_size.*#tmp_table_size = 64M#" /etc/my.cnf
         sed -i "s#^innodb_buffer_pool_size.*#innodb_buffer_pool_size = 512M#" /etc/my.cnf
-        sed -i "s#^innodb_log_file_size.*#innodb_log_file_size = 128M#" /etc/my.cnf
+        Set_MySQL_Redo_Log 128M
         sed -i "s#^performance_schema_max_table_instances.*#performance_schema_max_table_instances = 4000#" /etc/my.cnf
     elif [[ ${MemTotal} -ge 8192 && ${MemTotal} -lt 16384 ]]; then
         sed -i "s#^key_buffer_size.*#key_buffer_size = 256M#" /etc/my.cnf
@@ -176,7 +198,7 @@ MySQL_Opt()
         sed -i "s#^query_cache_size.*#query_cache_size = 128M#" /etc/my.cnf
         sed -i "s#^tmp_table_size.*#tmp_table_size = 128M#" /etc/my.cnf
         sed -i "s#^innodb_buffer_pool_size.*#innodb_buffer_pool_size = 1024M#" /etc/my.cnf
-        sed -i "s#^innodb_log_file_size.*#innodb_log_file_size = 256M#" /etc/my.cnf
+        Set_MySQL_Redo_Log 256M
         sed -i "s#^performance_schema_max_table_instances.*#performance_schema_max_table_instances = 6000#" /etc/my.cnf
     elif [[ ${MemTotal} -ge 16384 && ${MemTotal} -lt 32768 ]]; then
         sed -i "s#^key_buffer_size.*#key_buffer_size = 512M#" /etc/my.cnf
@@ -188,7 +210,7 @@ MySQL_Opt()
         sed -i "s#^query_cache_size.*#query_cache_size = 256M#" /etc/my.cnf
         sed -i "s#^tmp_table_size.*#tmp_table_size = 256M#" /etc/my.cnf
         sed -i "s#^innodb_buffer_pool_size.*#innodb_buffer_pool_size = 2048M#" /etc/my.cnf
-        sed -i "s#^innodb_log_file_size.*#innodb_log_file_size = 512M#" /etc/my.cnf
+        Set_MySQL_Redo_Log 512M
         sed -i "s#^performance_schema_max_table_instances.*#performance_schema_max_table_instances = 8000#" /etc/my.cnf
     elif [[ ${MemTotal} -ge 32768 ]]; then
         sed -i "s#^key_buffer_size.*#key_buffer_size = 1024M#" /etc/my.cnf
@@ -200,7 +222,7 @@ MySQL_Opt()
         sed -i "s#^query_cache_size.*#query_cache_size = 512M#" /etc/my.cnf
         sed -i "s#^tmp_table_size.*#tmp_table_size = 512M#" /etc/my.cnf
         sed -i "s#^innodb_buffer_pool_size.*#innodb_buffer_pool_size = 4096M#" /etc/my.cnf
-        sed -i "s#^innodb_log_file_size.*#innodb_log_file_size = 1024M#" /etc/my.cnf
+        Set_MySQL_Redo_Log 1024M
         sed -i "s#^performance_schema_max_table_instances.*#performance_schema_max_table_instances = 10000#" /etc/my.cnf
     fi
 }
@@ -209,11 +231,12 @@ Check_MySQL_Data_Dir()
 {
     if [ -d "${MySQL_Data_Dir}" ]; then
         datetime=$(date +"%Y%m%d%H%M%S")
-        mkdir -p /root/mysql-data-dir-backup${datetime}/
-        \cp ${MySQL_Data_Dir}/* /root/mysql-data-dir-backup${datetime}/
-        rm -rf ${MySQL_Data_Dir}/*
+        local backup_dir="/root/mysql-data-dir-backup${datetime}"
+        mkdir -p "${backup_dir}"
+        find "${MySQL_Data_Dir}" -mindepth 1 -maxdepth 1 -exec cp -a -- {} "${backup_dir}/" \;
+        find "${MySQL_Data_Dir}" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
     else
-        mkdir -p ${MySQL_Data_Dir}
+        mkdir -p "${MySQL_Data_Dir}"
     fi
 }
 
@@ -707,20 +730,26 @@ Install_MySQL_80()
     rm -f /etc/my.cnf
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "[+] Installing ${Mysql_Ver} Using Generic Binaries..."
-        Tar_Cd ${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext}
-        mkdir /usr/local/mysql
-        mv ${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}/* /usr/local/mysql/
+        mysql8_glibc_ver="${mysql8_glibc_ver:-2.28}"
+        mysql8_ext="${mysql8_ext:-tar.xz}"
+        mysql8_file="${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext}"
+        mysql8_dir="${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}"
+        Tar_Cd "${mysql8_file}" "${mysql8_dir}" || return 1
+        cd "${cur_dir}/src"
+        mkdir -p /usr/local/mysql
+        find "${mysql8_dir}" -mindepth 1 -maxdepth 1 -exec mv -f -- {} /usr/local/mysql/ \; || return 1
+        rmdir "${mysql8_dir}" || return 1
     else
         Echo_Blue "[+] Installing ${Mysql_Ver} Using Source code..."
         Tar_Cd ${Mysql_Ver}.tar.gz ${Mysql_Ver}
         Install_Boost
-        mkdir build && cd build
-        cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_BOOST}
-        Make_Install
+        mkdir build && cd build || return 1
+        cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_BOOST} || return 1
+        Make_Install || return 1
     fi
 
-    groupadd mysql
-    useradd -s /sbin/nologin -M -g mysql mysql
+    getent group mysql >/dev/null 2>&1 || groupadd mysql || return 1
+    id mysql >/dev/null 2>&1 || useradd -s /sbin/nologin -M -g mysql mysql || return 1
 
     cat > /etc/my.cnf<<EOF
 [client]
@@ -750,13 +779,11 @@ explicit_defaults_for_timestamp = true
 max_connections = 500
 max_connect_errors = 100
 open_files_limit = 65535
-default_authentication_plugin = mysql_native_password
 
 log-bin=mysql-bin
-binlog_format=mixed
+# MySQL 8.0 no longer needs the deprecated binlog_format option.
 server-id   = 1
 binlog_expire_logs_seconds = 864000
-early-plugin-load = ""
 
 default_storage_engine = InnoDB
 innodb_file_per_table = 1
@@ -764,7 +791,7 @@ innodb_data_home_dir = ${MySQL_Data_Dir}
 innodb_data_file_path = ibdata1:10M:autoextend
 innodb_log_group_home_dir = ${MySQL_Data_Dir}
 innodb_buffer_pool_size = 16M
-innodb_log_file_size = 5M
+innodb_redo_log_capacity = 100M
 innodb_log_buffer_size = 8M
 innodb_flush_log_at_trx_commit = 1
 innodb_lock_wait_timeout = 50
@@ -791,19 +818,38 @@ EOF
     MySQL_Opt
     Check_MySQL_Data_Dir
     chown -R mysql:mysql /usr/local/mysql
-    /usr/local/mysql/bin/mysqld --initialize-insecure --basedir=/usr/local/mysql --datadir=${MySQL_Data_Dir} --user=mysql
-    chown -R mysql:mysql ${MySQL_Data_Dir}
-    \cp /usr/local/mysql/support-files/mysql.server /etc/init.d/mysql
-    \cp ${cur_dir}/init.d/mysql.service /etc/systemd/system/mysql.service
-    chmod 755 /etc/init.d/mysql
+    Check_MySQL_Dependencies || return 1
+    local mysql_init_output
+    MySQL_Temporary_Password=''
+    mysql_init_output=$(mktemp /tmp/mysql-init.XXXXXX) || return 1
+    if ! /usr/local/mysql/bin/mysqld --initialize --console --basedir=/usr/local/mysql --datadir="${MySQL_Data_Dir}" --user=mysql >"${mysql_init_output}" 2>&1; then
+        cat "${mysql_init_output}" >&2
+        rm -f "${mysql_init_output}"
+        return 1
+    fi
+    MySQL_Temporary_Password=$(sed -n 's/.*[Tt]emporary password is generated for root@localhost: //p' "${mysql_init_output}" | tail -n 1)
+    rm -f "${mysql_init_output}"
+    if [ -z "${MySQL_Temporary_Password}" ]; then
+        echo "MySQL initialization did not provide a temporary root password." >&2
+        return 1
+    fi
+    chown -R mysql:mysql "${MySQL_Data_Dir}" || return 1
+    \cp /usr/local/mysql/support-files/mysql.server /etc/init.d/mysql || return 1
+    \cp "${cur_dir}/init.d/mysql.service" /etc/systemd/system/mysql.service || return 1
+    chmod 755 /etc/init.d/mysql || return 1
 
     cat > /etc/ld.so.conf.d/mysql.conf<<EOF
     /usr/local/mysql/lib
     /usr/local/lib
 EOF
-    ldconfig
-    ln -sf /usr/local/mysql/lib/mysql /usr/lib/mysql
-    ln -sf /usr/local/mysql/include/mysql /usr/include/mysql
+    ldconfig || return 1
+    if ldd /usr/local/mysql/bin/mysqld 2>&1 | grep -q 'not found'; then
+        echo "MySQL has unresolved shared-library dependencies." >&2
+        ldd /usr/local/mysql/bin/mysqld >&2
+        return 1
+    fi
+    ln -sf /usr/local/mysql/lib/mysql /usr/lib/mysql || return 1
+    ln -sf /usr/local/mysql/include/mysql /usr/include/mysql || return 1
 
-    MySQL_Sec_Setting
+    MySQL_Sec_Setting || return 1
 }

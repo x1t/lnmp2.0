@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-DB_Info=('MySQL 5.1.73' 'MySQL 5.5.62' 'MySQL 5.6.51' 'MySQL 5.7.42' 'MySQL 8.0.33' 'MariaDB 5.5.68' 'MariaDB 10.4.29' 'MariaDB 10.5.20' 'MariaDB 10.6.13' 'MariaDB 10.11.3')
-PHP_Info=('PHP 7.0.33' 'PHP 7.1.33' 'PHP 7.2.34' 'PHP 7.3.33' 'PHP 7.4.33' 'PHP 8.0.28' 'PHP 8.1.19' 'PHP 8.2.6' 'PHP 8.3.24' 'PHP 8.4.11')
+DB_Info=('MySQL 5.1.73' 'MySQL 5.5.62' 'MySQL 5.6.51' 'MySQL 5.7.42' 'MySQL 8.0.46' 'MariaDB 5.5.68' 'MariaDB 10.4.29' 'MariaDB 10.5.20' 'MariaDB 10.6.13' 'MariaDB 10.11.3')
+PHP_Info=('PHP 7.0.33' 'PHP 7.1.33' 'PHP 7.2.34' 'PHP 7.3.33' 'PHP 7.4.33' 'PHP 8.0.28' 'PHP 8.1.19' 'PHP 8.2.6' 'PHP 8.3.24' 'PHP 8.4.11' 'PHP 8.5.6')
 Apache_Info=('Apache 2.2.34' 'Apache 2.4.57')
 
 Database_Selection()
@@ -348,8 +348,8 @@ PHP_Selection()
     if [ -z ${PHPSelect} ]; then
         echo "==========================="
 
-        PHPSelect="5"
-        Echo_Yellow "You have 10 options for your PHP install."
+        PHPSelect="11"
+        Echo_Yellow "You have 11 options for your PHP install."
         echo "1: Install ${PHP_Info[0]}"
         echo "2: Install ${PHP_Info[1]}"
         echo "3: Install ${PHP_Info[2]}"
@@ -360,7 +360,8 @@ PHP_Selection()
         echo "8: Install ${PHP_Info[7]}"
         echo "9: Install ${PHP_Info[8]}"
         echo "10: Install ${PHP_Info[9]}"
-        read -p "Enter your choice (1, 2, 3, 4, 5, 6, 7, 8, 9, 10): " PHPSelect
+        echo "11: Install ${PHP_Info[10]} (Default)"
+        read -p "Enter your choice (1, 2, 3, 4, 5, 6, 7, 8, 9, 10 or 11): " PHPSelect
     fi
 
     case "${PHPSelect}" in
@@ -398,9 +399,12 @@ PHP_Selection()
     10)
         echo "You will install ${PHP_Info[9]}"
         ;;
+    11)
+        echo "You will install ${PHP_Info[10]}"
+        ;;
     *)
-        echo "No input,You will install ${PHP_Info[4]}"
-        PHPSelect="5"
+        echo "No input,You will install ${PHP_Info[10]}"
+        PHPSelect="11"
     esac
 }
 
@@ -704,34 +708,45 @@ Get_OS_Bit()
 
 Download_Files()
 {
-    local URL=$1
-    local FileName=$2
+    local URL="$1"
+    local FileName="$2"
     if [ -s "${FileName}" ]; then
         echo "${FileName} [found]"
+        return 0
     else
         echo "Notice: ${FileName} not found!!!download now..."
-        wget -c --progress=dot -e dotbytes=20M --prefer-family=IPv4 --no-check-certificate ${URL}
+        wget -c --progress=dot -e dotbytes=20M --prefer-family=IPv4 -T 120 -t 3 -O "${FileName}" "${URL}"
+        return $?
     fi
 }
 
 Tar_Cd()
 {
-    local FileName=$1
-    local DirName=$2
-    local extension=${FileName##*.}
-    cd ${cur_dir}/src
-    [[ -d "${DirName}" ]] && rm -rf ${DirName}
+    local FileName="$1"
+    local DirName="${2:-}"
+    local extension="${FileName##*.}"
+    cd "${cur_dir}/src" || return 1
+    if [ -n "${DirName}" ] && [ -d "${DirName}" ]; then
+        rm -rf -- "${DirName}" || return 1
+    fi
     echo "Uncompress ${FileName}..."
     if [ "$extension" == "gz" ] || [ "$extension" == "tgz" ]; then
-        tar zxf "${FileName}"
+        tar zxf "${FileName}" || return 1
     elif [ "$extension" == "bz2" ]; then
-        tar jxf "${FileName}"
+        tar jxf "${FileName}" || return 1
     elif [ "$extension" == "xz" ]; then
-        tar Jxf "${FileName}"
+        tar Jxf "${FileName}" || return 1
+    else
+        echo "Unsupported archive format: ${FileName}" >&2
+        return 1
     fi
     if [ -n "${DirName}" ]; then
+        if [ ! -d "${DirName}" ]; then
+            echo "Archive did not contain expected directory: ${DirName}" >&2
+            return 1
+        fi
         echo "cd ${DirName}..."
-        cd ${DirName}
+        cd "${DirName}" || return 1
     fi
 }
 
