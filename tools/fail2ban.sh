@@ -36,8 +36,8 @@ fi
 
 echo "Downloading..."
 cd ../src
-Download_Files ${Download_Mirror}/security/fail2ban/fail2ban-0.11.2.tar.gz fail2ban-0.11.2.tar.gz
-tar zxf fail2ban-0.11.2.tar.gz && cd fail2ban-0.11.2
+Download_Files ${Download_Mirror}/security/fail2ban/fail2ban-0.11.2.tar.gz fail2ban-0.11.2.tar.gz || exit 1
+Extract_Archive fail2ban-0.11.2.tar.gz && cd fail2ban-0.11.2
 echo "Installing..."
 python setup.py install --prefix=/usr
 

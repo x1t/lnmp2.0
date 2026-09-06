@@ -40,7 +40,7 @@ Install_PHPMemcached()
         export DEBIAN_FRONTEND=noninteractive
         apt-get install libsasl2-2 sasl2-bin libsasl2-2 libsasl2-dev libsasl2-modules -y
     fi
-    Download_Files ${Download_Mirror}/web/libmemcached/${Libmemcached_Ver}.tar.gz
+    Download_Files "${Download_Mirror}/web/libmemcached/${Libmemcached_Ver}.tar.gz" "${Libmemcached_Ver}.tar.gz" || return 1
     Tar_Cd ${Libmemcached_Ver}.tar.gz ${Libmemcached_Ver}
     if gcc -dumpversion|grep -Eq "^[7-9]|1[01]"; then
         patch -p1 < ${cur_dir}/src/patch/libmemcached-1.0.18-gcc7.patch

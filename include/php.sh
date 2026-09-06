@@ -214,12 +214,17 @@ Install_Composer()
 {
     if [ "${CheckMirror}" != "n" ]; then
         echo "Downloading Composer..."
+        local composer_version
+        local composer_sha256
         if echo "${PHPSelect}" | grep -Eqi '^[1-3]$' || echo "${php_version}" | grep -Eqi '^5.[2-6].*|7.[0-2].*' || echo "${Php_Ver}" | grep -Eqi "php-5.[2-6].*|php-7.[0-2].*"; then
-            composer_url="https://getcomposer.org/download/2.2.26/composer.phar"
+            composer_version='2.2.26'
+            composer_sha256='2f889b1d19666af6081448a526539f73b1d95d10f745536afd8132acb13743f3'
         else
-            composer_url="https://getcomposer.org/download/latest-stable/composer.phar"
+            composer_version='2.10.3'
+            composer_sha256='7a2d379d5b8ffdaa028580ef26494c36d2feef4b178d3dd1473a4dbc5e17c8d6'
         fi
-        if wget --progress=dot:giga --prefer-family=IPv4 -T 120 -t3 "${composer_url}" -O /usr/local/bin/composer; then
+        composer_url="https://getcomposer.org/download/${composer_version}/composer.phar"
+        if Download_Files "${composer_url}" /usr/local/bin/composer "${composer_sha256}"; then
             chmod +x /usr/local/bin/composer
             echo "Composer install successfully."
         else
@@ -1037,7 +1042,7 @@ eof
     if [ -d "${Default_Website_Dir}/phpmyadmin" ]; then
         rm -rf -- "${Default_Website_Dir}/phpmyadmin" || return 1
     fi
-    tar Jxf "${PhpMyAdmin_Ver}.tar.xz" || return 1
+    Extract_Archive "${PhpMyAdmin_Ver}.tar.xz" || return 1
     if [ ! -d "${PhpMyAdmin_Ver}" ]; then
         echo "phpMyAdmin archive did not contain the expected directory." >&2
         return 1

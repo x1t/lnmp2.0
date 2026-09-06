@@ -129,19 +129,10 @@ Upgrade_MariaDB()
     else
         MariaDB_FileName="mariadb-${mariadb_version}"
     fi
-    if [ -s ${MariaDB_FileName}.tar.gz ]; then
-        echo "${MariaDB_FileName}.tar.gz [found]"
-    else
-        echo "Notice: ${MariaDB_FileName}.tar.gz not found!!!download now......"
-        Download_Files https://downloads.mariadb.org/rest-api/mariadb/${mariadb_version}/${MariaDB_FileName}.tar.gz ${MariaDB_FileName}.tar.gz
-        if [ $? -eq 0 ]; then
-            echo "Download ${MariaDB_FileName}.tar.gz successfully!"
-        else
-            echo "You enter MariaDB Version was:"${mariadb_version}
-            Echo_Red "Error! You entered a wrong version number or can't download from mariadb mirror, please check!"
-            sleep 5
-            exit 1
-        fi
+    if ! Download_Files "https://downloads.mariadb.org/rest-api/mariadb/${mariadb_version}/${MariaDB_FileName}.tar.gz" "${MariaDB_FileName}.tar.gz"; then
+        echo "You enter MariaDB Version was:${mariadb_version}"
+        Echo_Red "No trusted SHA256 entry exists for this MariaDB version."
+        exit 1
     fi
     echo "============================check files=================================="
 

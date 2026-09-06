@@ -1,0 +1,14 @@
+# SHA256 lock file for source archives used by this repository.
+# Each entry is verified before an archive is reused or extracted.
+3b08f5f4f9b4eb82f151a7040bfd6fe6c6fb922efe4b1659c66ea933276965e8  src/libiconv-1.18.tar.gz
+bf2f1671f44af88e66477db0982d5ecb5116a5c767b0a0d68acb34499d41b793  src/libmcrypt-2.5.8.tar.bz2
+5145aa844e54cca89ddab6fb7dd9e5952811d8d787c4f4bf27eb261e6c182098  src/mcrypt-2.6.8.tar.gz
+56521c52a9033779154432d0ae47ad7198914785265e1f570cee21ab248dfef0  src/mhash-0.9.9.9.tar.bz2
+36bc4f1cc413335368ee656c42afca65c5a3987e8768cc28cf11ba775e785a5f  src/freetype-2.14.3.tar.xz
+19108658b23b3ec5058edc9f66ac545ea19f9537234be1ec62b714c84399366d  src/pcre-8.44.tar.bz2
+8dee9b24bdb1dcbf0c3d1e9b02fb8f6bf22165e807f45adeb7c9677536859d3b  src/openssl-1.1.1t.tar.gz
+4261dc90e9e47c1c4041276e9aaa3d48ebe2e664f728e14fa95ae6c67d57a08b  src/nginx-1.30.4.tar.gz
+0fcdb2e88b5bb151118420745070a34621463dd85a50e1eacd7c3aa1b9d1f4a2  src/mysql-8.0.46-linux-glibc2.28-x86_64.tar.xz
+2c39c75b54df89b01195b72ad0ee1fcd490c71db18bc52bcd61fb2ffb57b26fa  src/php-8.4.11.tar.bz2
+4457240f65f0c59a620920d66cdab1b12100a431e03ad9febe38b13a1b25957f  src/php-8.5.6.tar.bz2
+373f9599dfbd96d6fe75316d5dad189e68c305f297edf42377db9dd6b41b2557  src/phpMyAdmin-5.2.1-all-languages.tar.xz

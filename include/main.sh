@@ -710,36 +710,269 @@ Download_Files()
 {
     local URL="$1"
     local FileName="$2"
-    if [ -s "${FileName}" ]; then
-        echo "${FileName} [found]"
-        return 0
-    else
-        echo "Notice: ${FileName} not found!!!download now..."
-        wget -c --progress=dot -e dotbytes=20M --prefer-family=IPv4 -T 120 -t 3 -O "${FileName}" "${URL}"
-        return $?
+    local Expected_SHA256="${3:-}"
+
+    if [ -z "${URL}" ] || [ -z "${FileName}" ]; then
+        Echo_Red "Download failed: URL and output file are required."
+        return 1
     fi
+    if ! Validate_Download_URL "${URL}"; then
+        return 1
+    fi
+
+    if [ -z "${Expected_SHA256}" ]; then
+        Expected_SHA256=$(Get_Source_Checksum "${FileName}") || true
+    fi
+    Expected_SHA256=$(printf '%s' "${Expected_SHA256}" | tr '[:upper:]' '[:lower:]')
+    if ! [[ "${Expected_SHA256}" =~ ^[0-9a-f]{64}$ ]]; then
+        Echo_Red "Download refused: no trusted SHA256 entry for $(basename -- "${FileName}")."
+        return 1
+    fi
+
+    if [ -s "${FileName}" ]; then
+        if Verify_Source_Checksum "${FileName}" "${Expected_SHA256}"; then
+            echo "${FileName} [verified]"
+            return 0
+        fi
+        Echo_Yellow "${FileName} failed SHA256 verification; removing it."
+        rm -f -- "${FileName}" || return 1
+    fi
+
+    local TempFile="${FileName}.part"
+    rm -f -- "${TempFile}" || return 1
+    echo "Notice: ${FileName} not found or not verified; downloading over HTTPS..."
+    if ! wget --https-only --progress=dot -e dotbytes=20M --prefer-family=IPv4 -T 120 -t 3 --max-redirect=3 -O "${TempFile}" "${URL}"; then
+        rm -f -- "${TempFile}"
+        Echo_Red "Download failed: ${URL}"
+        return 1
+    fi
+    if ! Verify_Source_Checksum "${TempFile}" "${Expected_SHA256}"; then
+        rm -f -- "${TempFile}"
+        return 1
+    fi
+    mv -f -- "${TempFile}" "${FileName}" || return 1
+    echo "${FileName} [SHA256 verified]"
+}
+
+Get_Source_Checksum()
+{
+    local FileName="$1"
+    local Checksum_File="${cur_dir}/${Source_Checksum_File:-checksums.sha256}"
+    [ -r "${Checksum_File}" ] || return 1
+    awk -v name="$(basename -- "${FileName}")" '
+        /^[[:space:]]*#/ || NF < 2 { next }
+        {
+            manifest_name = $2
+            sub(/^.*\//, "", manifest_name)
+        }
+        manifest_name == name {
+            print tolower($1)
+            found = 1
+            exit
+        }
+        END {
+            if (!found) {
+                exit 1
+            }
+        }
+    ' "${Checksum_File}"
+}
+
+Verify_Source_Checksum()
+{
+    local FileName="$1"
+    local Expected_SHA256="$2"
+    local Actual_SHA256
+
+    if [ ! -s "${FileName}" ]; then
+        Echo_Red "Checksum failed: ${FileName} is missing or empty."
+        return 1
+    fi
+    Actual_SHA256=$(sha256sum -- "${FileName}" | awk '{print tolower($1)}') || return 1
+    if [ "${Actual_SHA256}" != "${Expected_SHA256}" ]; then
+        Echo_Red "SHA256 mismatch for ${FileName}."
+        echo "Expected: ${Expected_SHA256}"
+        echo "Actual:   ${Actual_SHA256}"
+        return 1
+    fi
+    return 0
+}
+
+Require_Verified_Source_Archive()
+{
+    local FileName="$1"
+    local Expected_SHA256="${2:-}"
+
+    if [ -z "${Expected_SHA256}" ]; then
+        Expected_SHA256=$(Get_Source_Checksum "${FileName}") || {
+            Echo_Red "Archive refused: no trusted SHA256 entry for $(basename -- "${FileName}")."
+            return 1
+        }
+    fi
+    Expected_SHA256=$(printf '%s' "${Expected_SHA256}" | tr '[:upper:]' '[:lower:]')
+    if ! [[ "${Expected_SHA256}" =~ ^[0-9a-f]{64}$ ]]; then
+        Echo_Red "Archive refused: invalid SHA256 entry for $(basename -- "${FileName}")."
+        return 1
+    fi
+    Verify_Source_Checksum "${FileName}" "${Expected_SHA256}"
+}
+
+Validate_Download_URL()
+{
+    local URL="$1"
+    local Host
+
+    if [[ "${URL}" != https://* ]]; then
+        Echo_Red "Download refused: only HTTPS sources are allowed: ${URL}"
+        return 1
+    fi
+
+    Host="${URL#https://}"
+    Host="${Host%%/*}"
+    Host="${Host%%:*}"
+    Host="${Host,,}"
+    case "${Host}" in
+        *.edu|archive.apache.org|cdn.mysql.com|dev.mysql.com|download.pureftpd.org|download.redis.io|download.savannah.nongnu.org|downloads.ioncube.com|downloads.mariadb.org|downloads.sourceforge.net|files.phpmyadmin.net|getcomposer.org|github.com|mirror.cs.uchicago.edu|mirror.math.princeton.edu|mirrors.mit.edu|museum.php.net|nginx.org|pecl.php.net|raw.githubusercontent.com|sourceforge.net|www.openssl.org|www.php.net)
+            return 0
+            ;;
+        *)
+            Echo_Red "Download refused: source host is not allowlisted: ${Host}"
+            return 1
+            ;;
+    esac
+}
+
+Validate_Archive_Entries()
+{
+    local FileName="$1"
+    local extension="${FileName##*.}"
+    local ListFile
+
+    [ -f "${FileName}" ] || {
+        Echo_Red "Archive validation failed: ${FileName} is missing."
+        return 1
+    }
+
+    ListFile=$(mktemp "${TMPDIR:-/tmp}/lnmp-archive.XXXXXX") || return 1
+    case "${extension}" in
+        gz|tgz)
+            tar --list --gzip --file "${FileName}" > "${ListFile}"
+            ;;
+        bz2)
+            tar --list --bzip2 --file "${FileName}" > "${ListFile}"
+            ;;
+        xz)
+            tar --list --xz --file "${FileName}" > "${ListFile}"
+            ;;
+        *)
+            rm -f -- "${ListFile}"
+            Echo_Red "Unsupported archive format: ${FileName}"
+            return 1
+            ;;
+    esac
+    if [ "$?" -ne 0 ]; then
+        rm -f -- "${ListFile}"
+        Echo_Red "Archive listing failed: ${FileName}"
+        return 1
+    fi
+
+    if awk '
+        $0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/ {
+            print "unsafe archive path: " $0 > "/dev/stderr"
+            bad = 1
+        }
+        END { exit bad }
+    ' "${ListFile}"; then
+        rm -f -- "${ListFile}"
+        return 0
+    fi
+    rm -f -- "${ListFile}"
+    Echo_Red "Archive rejected because it contains an absolute or parent-directory path: ${FileName}"
+    return 1
+}
+
+Extract_Archive()
+{
+    local FileName="$1"
+    local TargetDir="${2:-.}"
+    local Expected_SHA256="${3:-}"
+    local extension="${FileName##*.}"
+
+    Require_Verified_Source_Archive "${FileName}" "${Expected_SHA256}" || return 1
+    Validate_Archive_Entries "${FileName}" || return 1
+    [ -d "${TargetDir}" ] || {
+        Echo_Red "Archive extraction directory does not exist: ${TargetDir}"
+        return 1
+    }
+    case "${extension}" in
+        gz|tgz)
+            tar --no-same-owner --no-same-permissions --directory "${TargetDir}" --extract --gzip --file "${FileName}"
+            ;;
+        bz2)
+            tar --no-same-owner --no-same-permissions --directory "${TargetDir}" --extract --bzip2 --file "${FileName}"
+            ;;
+        xz)
+            tar --no-same-owner --no-same-permissions --directory "${TargetDir}" --extract --xz --file "${FileName}"
+            ;;
+        *)
+            Echo_Red "Unsupported archive format: ${FileName}"
+            return 1
+            ;;
+    esac
+}
+
+Validate_Zip_Entries()
+{
+    local FileName="$1"
+    local ListFile
+
+    [ -f "${FileName}" ] || {
+        Echo_Red "ZIP validation failed: ${FileName} is missing."
+        return 1
+    }
+    ListFile=$(mktemp "${TMPDIR:-/tmp}/lnmp-zip.XXXXXX") || return 1
+    if ! unzip -Z1 "${FileName}" > "${ListFile}"; then
+        rm -f -- "${ListFile}"
+        Echo_Red "ZIP listing failed: ${FileName}"
+        return 1
+    fi
+    if awk '
+        $0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/ {
+            print "unsafe ZIP path: " $0 > "/dev/stderr"
+            bad = 1
+        }
+        END { exit bad }
+    ' "${ListFile}"; then
+        rm -f -- "${ListFile}"
+        return 0
+    fi
+    rm -f -- "${ListFile}"
+    Echo_Red "ZIP rejected because it contains an absolute or parent-directory path: ${FileName}"
+    return 1
+}
+
+Extract_Zip()
+{
+    local FileName="$1"
+    local TargetDir="${2:-.}"
+    local Expected_SHA256="${3:-}"
+
+    Require_Verified_Source_Archive "${FileName}" "${Expected_SHA256}" || return 1
+    Validate_Zip_Entries "${FileName}" || return 1
+    mkdir -p -- "${TargetDir}" || return 1
+    unzip -q "${FileName}" -d "${TargetDir}"
 }
 
 Tar_Cd()
 {
     local FileName="$1"
     local DirName="${2:-}"
-    local extension="${FileName##*.}"
     cd "${cur_dir}/src" || return 1
     if [ -n "${DirName}" ] && [ -d "${DirName}" ]; then
         rm -rf -- "${DirName}" || return 1
     fi
     echo "Uncompress ${FileName}..."
-    if [ "$extension" == "gz" ] || [ "$extension" == "tgz" ]; then
-        tar zxf "${FileName}" || return 1
-    elif [ "$extension" == "bz2" ]; then
-        tar jxf "${FileName}" || return 1
-    elif [ "$extension" == "xz" ]; then
-        tar Jxf "${FileName}" || return 1
-    else
-        echo "Unsupported archive format: ${FileName}" >&2
-        return 1
-    fi
+    Extract_Archive "${FileName}" || return 1
     if [ -n "${DirName}" ]; then
         if [ ! -d "${DirName}" ]; then
             echo "Archive did not contain expected directory: ${DirName}" >&2

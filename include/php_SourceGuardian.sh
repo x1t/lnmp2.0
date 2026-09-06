@@ -18,37 +18,37 @@ Install_SourceGuardian()
 
     if [ "${ARCH}" = "x86_64" ]; then
         echo "${ARCH}"
-        Download_Files ${Download_Mirror}/web/sourceguardian/14.0.0/loaders.linux-${ARCH}.zip loaders.linux-${ARCH}.zip
+        Download_Files "${Download_Mirror}/web/sourceguardian/14.0.0/loaders.linux-${ARCH}.zip" "loaders.linux-${ARCH}.zip" || return 1
     elif [ "${ARCH}" = "i386" ]; then
         if echo "${Cur_PHP_Version}" | grep -Eqi '^7.[2-4].*|8.[0-2].*'; then
             Echo_Red "Current PHP version does not support SourceGuardian!"
             exit 1
         fi
-        Download_Files ${Download_Mirror}/web/sourceguardian/12.1.2/loaders.linux-${ARCH}.zip loaders.linux-${ARCH}.zip
+        Download_Files "${Download_Mirror}/web/sourceguardian/12.1.2/loaders.linux-${ARCH}.zip" "loaders.linux-${ARCH}.zip" || return 1
     elif [ "${ARCH}" = "armhf" ]; then
         if echo "${Cur_PHP_Version}" | grep -Eqi '^5.2.*'; then
             Echo_Red "Current PHP version does not support SourceGuardian!"
             exit 1
         elif echo "${Cur_PHP_Version}" | grep -Eqi '^5.[3-6].*|7.[0-3].*'; then
-            Download_Files ${Download_Mirror}/web/sourceguardian/12.1.2/loaders.linux-${ARCH}.zip loaders.linux-${ARCH}.zip
+            Download_Files "${Download_Mirror}/web/sourceguardian/12.1.2/loaders.linux-${ARCH}.zip" "loaders.linux-${ARCH}.zip" || return 1
         elif echo "${Cur_PHP_Version}" | grep -Eqi '^7.4.*|^8.[0-2].*'; then
-            Download_Files ${Download_Mirror}/web/sourceguardian/14.0.3/loaders.linux-${ARCH}.zip loaders.linux-${ARCH}.zip
+            Download_Files "${Download_Mirror}/web/sourceguardian/14.0.3/loaders.linux-${ARCH}.zip" "loaders.linux-${ARCH}.zip" || return 1
         fi
     elif [ "${ARCH}" = "aarch64" ]; then
         if echo "${Cur_PHP_Version}" | grep -Eqi '^5.*'; then
             Echo_Red "Current PHP version does not support SourceGuardian!"
             exit 1
         elif echo "${Cur_PHP_Version}" | grep -Eqi '^7.[0-3].*'; then
-            Download_Files ${Download_Mirror}/web/sourceguardian/12.1.2/loaders.linux-${ARCH}.zip loaders.linux-${ARCH}.zip
+            Download_Files "${Download_Mirror}/web/sourceguardian/12.1.2/loaders.linux-${ARCH}.zip" "loaders.linux-${ARCH}.zip" || return 1
         elif echo "${Cur_PHP_Version}" | grep -Eqi '^7.4.*|8.[0-2].*'; then
-            Download_Files ${Download_Mirror}/web/sourceguardian/14.0.3/loaders.linux-${ARCH}.zip loaders.linux-${ARCH}.zip
+            Download_Files "${Download_Mirror}/web/sourceguardian/14.0.3/loaders.linux-${ARCH}.zip" "loaders.linux-${ARCH}.zip" || return 1
         fi
     else
         Echo_Red "Unsupported architecture!"
         exit 1
     fi
 
-    unzip loaders.linux-${ARCH}.zip -d loaders.linux-${ARCH}
+    Extract_Zip "loaders.linux-${ARCH}.zip" "loaders.linux-${ARCH}" || return 1
 
     if [ ! -s "loaders.linux-${ARCH}/${zend_ext}" ]; then
         echo "${zend_ext} not found!"

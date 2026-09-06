@@ -179,16 +179,18 @@ if [ "${isSSL}" == "ssl" ]; then
         if [ -s /usr/local/acme.sh/acme.sh ]; then
             echo "/usr/local/acme.sh/acme.sh [found]"
         else
-            cd /tmp
-            [[ -f latest.tar.gz ]] && rm -f latest.tar.gz
-            # Use official acme.sh GitHub repository for security
-            wget https://github.com/acmesh-official/acme.sh/archive/master.tar.gz -O latest.tar.gz --prefer-family=IPv4 --no-check-certificate
-            tar zxf latest.tar.gz
-            cd acme.sh-*
+            cd "${cur_dir}/src" || exit 1
+            Acme_Version='3.1.4'
+            Acme_Archive="acme.sh-${Acme_Version}.tar.gz"
+            Acme_SHA256='e5f8e187bbf5251e0cd8891f2622daab9850366bd17bea9f92c2fe2ee091fd32'
+            rm -f -- "${Acme_Archive}"
+            Download_Files "https://github.com/acmesh-official/acme.sh/archive/refs/tags/${Acme_Version}.tar.gz" "${Acme_Archive}" || exit 1
+            Extract_Archive "${Acme_Archive}" . "${Acme_SHA256}" || exit 1
+            cd "acme.sh-${Acme_Version}" || exit 1
             ./acme.sh --install --log --home /usr/local/acme.sh --certhome /usr/local/nginx/conf/ssl -m ${email_address}
-            cd ..
-            rm -f latest.tar.gz
-            rm -rf acme.sh-*
+            cd "${cur_dir}/src" || exit 1
+            rm -f -- "${Acme_Archive}"
+            rm -rf -- "acme.sh-${Acme_Version}"
             sed -i 's/cat "\$CERT_PATH"$/#cat "\$CERT_PATH"/g' /usr/local/acme.sh/acme.sh
             if command -v yum >/dev/null 2>&1; then
                 yum -y update nss
@@ -296,16 +298,18 @@ if [ "${isSSL}" == "ssl" ]; then
         if [ -s /usr/local/acme.sh/acme.sh ]; then
             echo "/usr/local/acme.sh/acme.sh [found]"
         else
-            cd /tmp
-            [[ -s latest.tar.gz ]] && rm -f latest.tar.gz
-            # Use official acme.sh GitHub repository for security
-            wget https://github.com/acmesh-official/acme.sh/archive/master.tar.gz -O latest.tar.gz --prefer-family=IPv4 --no-check-certificate
-            tar zxf latest.tar.gz
-            cd acme.sh-*
+            cd "${cur_dir}/src" || exit 1
+            Acme_Version='3.1.4'
+            Acme_Archive="acme.sh-${Acme_Version}.tar.gz"
+            Acme_SHA256='e5f8e187bbf5251e0cd8891f2622daab9850366bd17bea9f92c2fe2ee091fd32'
+            rm -f -- "${Acme_Archive}"
+            Download_Files "https://github.com/acmesh-official/acme.sh/archive/refs/tags/${Acme_Version}.tar.gz" "${Acme_Archive}" || exit 1
+            Extract_Archive "${Acme_Archive}" . "${Acme_SHA256}" || exit 1
+            cd "acme.sh-${Acme_Version}" || exit 1
             ./acme.sh --install --log --home /usr/local/acme.sh --certhome /usr/local/apache/conf/ssl -m ${email_address}
-            cd ..
-            rm -f latest.tar.gz
-            rm -rf acme.sh-*
+            cd "${cur_dir}/src" || exit 1
+            rm -f -- "${Acme_Archive}"
+            rm -rf -- "acme.sh-${Acme_Version}"
             sed -i 's/cat "\$CERT_PATH"$/#cat "\$CERT_PATH"/g' /usr/local/acme.sh/acme.sh
             if command -v yum >/dev/null 2>&1; then
                 yum -y update nss

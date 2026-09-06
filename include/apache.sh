@@ -74,20 +74,12 @@ Install_Apache_24()
     fi
     Tar_Cd ${Apache_Ver}.tar.bz2 ${Apache_Ver}
     cd srclib
-    if [ -s "${cur_dir}/src/${APR_Ver}.tar.bz2" ]; then
-        echo "${APR_Ver}.tar.bz2 [found]"
-        cp ${cur_dir}/src/${APR_Ver}.tar.bz2 .
-    else
-        Download_Files ${Download_Mirror}/web/apache/${APR_Ver}.tar.bz2 ${APR_Ver}.tar.bz2
-    fi
-    if [ -s "${cur_dir}/src/${APR_Util_Ver}.tar.bz2" ]; then
-        echo "${APR_Util_Ver}.tar.bz2 [found]"
-        cp ${cur_dir}/src/${APR_Util_Ver}.tar.bz2 .
-    else
-        Download_Files ${Download_Mirror}/web/apache/${APR_Util_Ver}.tar.bz2 ${APR_Util_Ver}.tar.bz2
-    fi
-    tar jxf ${APR_Ver}.tar.bz2
-    tar jxf ${APR_Util_Ver}.tar.bz2
+    Download_Files "${Download_Mirror}/web/apache/${APR_Ver}.tar.bz2" "${cur_dir}/src/${APR_Ver}.tar.bz2" || return 1
+    Download_Files "${Download_Mirror}/web/apache/${APR_Util_Ver}.tar.bz2" "${cur_dir}/src/${APR_Util_Ver}.tar.bz2" || return 1
+    cp "${cur_dir}/src/${APR_Ver}.tar.bz2" .
+    cp "${cur_dir}/src/${APR_Util_Ver}.tar.bz2" .
+    Extract_Archive "${APR_Ver}.tar.bz2" || return 1
+    Extract_Archive "${APR_Util_Ver}.tar.bz2" || return 1
     mv ${APR_Ver} apr
     mv ${APR_Util_Ver} apr-util
     cd ..

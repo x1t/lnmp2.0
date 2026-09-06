@@ -35,7 +35,7 @@ Install_ionCube()
             exit 1
         fi
     fi
-    tar zxf ioncube_loaders_lin_${ARCH}.tar.gz
+    Extract_Archive "ioncube_loaders_lin_${ARCH}.tar.gz" || return 1
     if [ ! -d "/usr/local/ioncube" ]; then
         mkdir -p /usr/local/ioncube
     fi

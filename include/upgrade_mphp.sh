@@ -91,7 +91,7 @@ Upgrade_Multiplephp()
     php_version=""
     Cur_MPHP_Version=$("${Cur_MPHP_Path}/bin/php-config" --version)
     echo "Current PHP Version: ${Cur_MPHP_Version}"
-    echo "You can get version number from http://www.php.net"
+    echo "You can get version number from https://www.php.net"
     read -p "Please enter a PHP Version you want: " php_version
     if [ "${php_version}" = "" ]; then
         Echo_Red "Error: You must enter a corrent php version!!"
@@ -105,25 +105,9 @@ Upgrade_Multiplephp()
     fi
     Press_Start
     cd ${cur_dir}/src
-    if [ -s php-${php_version}.tar.bz2 ]; then
-        echo "php-${php_version}.tar.bz2 [found]"
-    else
-        echo "Notice: php-${php_version}.tar.bz2 not found!!!download now..."
-        Get_Country
-        # Always use official PHP download sources for security
-        Download_Files https://www.php.net/distributions/php-${php_version}.tar.bz2 php-${php_version}.tar.bz2
-        if [ $? -ne 0 ]; then
-            # Fallback to PHP museum for older versions
-            Download_Files http://museum.php.net/php5/php-${php_version}.tar.bz2 php-${php_version}.tar.bz2
-        fi
-        if [ $? -eq 0 ]; then
-            echo "Download php-${php_version}.tar.bz2 successfully!"
-        else
-                echo "You enter PHP Version was:"${php_version}
-                Echo_Red "Error! You entered a wrong version number, please check!"
-                exit 1
-            fi
-        fi
+    Get_Country
+    if ! Download_Files "https://www.php.net/distributions/php-${php_version}.tar.bz2" "php-${php_version}.tar.bz2"; then
+        Download_Files "https://museum.php.net/php5/php-${php_version}.tar.bz2" "php-${php_version}.tar.bz2" || return 1
     fi
 
     lnmp stop

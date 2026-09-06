@@ -653,7 +653,7 @@ Upgrade_MySQL()
     cur_mysql_version=`/usr/local/mysql/bin/mysql_config --version`
     mysql_version=""
     echo "Current MYSQL Version:${cur_mysql_version}"
-    echo "You can get version number from http://dev.mysql.com/downloads/mysql/"
+    echo "You can get version number from https://dev.mysql.com/downloads/mysql/"
     Echo_Yellow "Please input MySQL Version you want."
     read -p "(example: 5.5.60 ): " mysql_version
     if [ "${mysql_version}" = "" ]; then
@@ -758,20 +758,11 @@ Upgrade_MySQL()
             mysql_src="mysql-${mysql_version}.tar.gz"
         fi
     fi
-    if [ -s "${mysql_src}" ]; then
-        echo "${mysql_src} [found]"
-    else
-        Download_Files http://cdn.mysql.com/Downloads/MySQL-${mysql_short_version}/${mysql_src} ${mysql_src}
-        if [ $? -eq 0 ]; then
-            echo "Download ${mysql_src} successfully!"
-        else
-            Download_Files https://cdn.mysql.com/archives/mysql-${mysql_short_version}/${mysql_src} ${mysql_src}
-            if [ $? -ne 0 ]; then
-                echo "You enter MySQL Version was: ${mysql_version}"
-                Echo_Red "Error! You entered a wrong version number, please check!"
-                sleep 5
-                exit 1
-            fi
+    if ! Download_Files "https://cdn.mysql.com/Downloads/MySQL-${mysql_short_version}/${mysql_src}" "${mysql_src}"; then
+        if ! Download_Files "https://cdn.mysql.com/archives/mysql-${mysql_short_version}/${mysql_src}" "${mysql_src}"; then
+            echo "You enter MySQL Version was: ${mysql_version}"
+            Echo_Red "No trusted SHA256 entry exists for this MySQL version."
+            exit 1
         fi
     fi
     Check_Openssl

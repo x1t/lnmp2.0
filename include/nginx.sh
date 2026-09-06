@@ -20,13 +20,13 @@ Install_Nginx_Openssl()
             # Use official OpenSSL source
             Download_Files "https://www.openssl.org/source/old/1.0.2/${Openssl_Ver}.tar.gz" "${Openssl_Ver}.tar.gz" || return 1
             [[ -d "${Openssl_Ver}" ]] && rm -rf ${Openssl_Ver}
-            tar zxf "${Openssl_Ver}.tar.gz" || return 1
+            Extract_Archive "${Openssl_Ver}.tar.gz" || return 1
             Nginx_With_Openssl="--with-openssl=${cur_dir}/src/${Openssl_Ver}"
         else
             Download_Files "https://www.openssl.org/source/old/1.1.1/${Openssl_New_Ver}.tar.gz" "${Openssl_New_Ver}.tar.gz" || return 1
             [[ -d "${Openssl_New_Ver}" ]] && rm -rf ${Openssl_New_Ver}
-            tar zxf "${Openssl_New_Ver}.tar.gz" || return 1
-            Nginx_With_Openssl="--with-openssl=${cur_dir}/src/${Openssl_New_Ver} --with-openssl-opt='enable-weak-ssl-ciphers'"
+            Extract_Archive "${Openssl_New_Ver}.tar.gz" || return 1
+            Nginx_With_Openssl="--with-openssl=${cur_dir}/src/${Openssl_New_Ver}"
         fi
     fi
 }
@@ -43,8 +43,8 @@ Install_Nginx_Lua()
         Download_Files ${Download_Mirror}/lib/lua/${LuaRestyLrucache}.tar.gz ${LuaRestyLrucache}.tar.gz
 
         Echo_Blue "[+] Installing ${Luajit_Ver}... "
-        tar zxf ${LuaNginxModule}.tar.gz
-        tar zxf ${NgxDevelKit}.tar.gz
+        Extract_Archive "${LuaNginxModule}.tar.gz" || return 1
+        Extract_Archive "${NgxDevelKit}.tar.gz" || return 1
         Tar_Cd ${Luajit_Ver}.tar.gz ${Luajit_Ver}
         make
         make install PREFIX=/usr/local/luajit

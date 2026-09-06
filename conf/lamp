@@ -20,6 +20,47 @@ echo "+-------------------------------------------+"
 arg1=$1
 arg2=$2
 
+Install_Acme_Release()
+{
+    local Acme_Version='3.1.4'
+    local Acme_Archive="/tmp/acme.sh-${Acme_Version}.tar.gz"
+    local Acme_Directory="/tmp/acme.sh-${Acme_Version}"
+    local Acme_List="/tmp/acme.sh-${Acme_Version}.list"
+    local Acme_SHA256='e5f8e187bbf5251e0cd8891f2622daab9850366bd17bea9f92c2fe2ee091fd32'
+
+    rm -f -- "${Acme_Archive}" "${Acme_List}"
+    if command -v curl >/dev/null 2>&1; then
+        curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "${Acme_Archive}" \
+            "https://github.com/acmesh-official/acme.sh/archive/refs/tags/${Acme_Version}.tar.gz"
+    elif command -v wget >/dev/null 2>&1; then
+        wget --prefer-family=IPv4 --https-only --timeout=120 --tries=3 --max-redirect=3 \
+            --output-document="${Acme_Archive}" \
+            "https://github.com/acmesh-official/acme.sh/archive/refs/tags/${Acme_Version}.tar.gz"
+    else
+        echo "Error: curl or wget is required to install acme.sh." >&2
+        return 1
+    fi
+    if [ "$?" -ne 0 ] || ! printf '%s  %s\n' "${Acme_SHA256}" "${Acme_Archive}" | sha256sum -c -; then
+        rm -f -- "${Acme_Archive}"
+        echo "Error: acme.sh archive download or SHA256 verification failed." >&2
+        return 1
+    fi
+    if ! tar --list --gzip --file "${Acme_Archive}" > "${Acme_List}"; then
+        rm -f -- "${Acme_Archive}" "${Acme_List}"
+        echo "Error: acme.sh archive listing failed." >&2
+        return 1
+    fi
+    if ! awk '$0 ~ /^\// || $0 ~ /(^|\/)\.\.(\/|$)/ { exit 1 }' "${Acme_List}"; then
+        rm -f -- "${Acme_Archive}" "${Acme_List}"
+        echo "Error: acme.sh archive contains an unsafe path." >&2
+        return 1
+    fi
+    rm -rf -- "${Acme_Directory}"
+    tar --no-same-owner --no-same-permissions --directory /tmp --extract --gzip --file "${Acme_Archive}" || return 1
+    rm -f -- "${Acme_List}"
+}
+
 lamp_start()
 {
     echo "Starting LAMP..."
@@ -828,16 +869,12 @@ Install_Check_Acme.sh()
             /usr/local/acme.sh/acme.sh --register-account -m ${email_address}
         fi
     else
-        cd /tmp
-        [[ -f latest.tar.gz ]] && rm -f latest.tar.gz
-        # Use official acme.sh GitHub repository for security
-        wget https://github.com/acmesh-official/acme.sh/archive/master.tar.gz -O latest.tar.gz --prefer-family=IPv4 --no-check-certificate
-        tar zxf latest.tar.gz
-        cd acme.sh-*
+        Install_Acme_Release || exit 1
+        cd /tmp/acme.sh-3.1.4 || exit 1
         ./acme.sh --install ${acme_sh_sudo} --log --home /usr/local/acme.sh --certhome /usr/local/apache/conf/ssl -m ${email_address}
-        cd ..
-        rm -f latest.tar.gz
-        rm -rf acme.sh-*
+        cd /tmp || exit 1
+        rm -f -- /tmp/acme.sh-3.1.4.tar.gz
+        rm -rf -- /tmp/acme.sh-3.1.4
         sed -i 's/cat "\$CERT_PATH"$/#cat "\$CERT_PATH"/g' /usr/local/acme.sh/acme.sh
         cat >/usr/local/acme.sh/upgrade.sh<<EOF
 #!/bin/bash

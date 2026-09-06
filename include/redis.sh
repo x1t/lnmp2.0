@@ -20,7 +20,7 @@ Install_Redis()
         if gcc -dumpversion|grep -q "^[34]."; then
             Redis_Stable_Ver='redis-5.0.9'
         fi
-        Download_Files http://download.redis.io/releases/${Redis_Stable_Ver}.tar.gz ${Redis_Stable_Ver}.tar.gz
+        Download_Files https://download.redis.io/releases/${Redis_Stable_Ver}.tar.gz ${Redis_Stable_Ver}.tar.gz || return 1
         Tar_Cd ${Redis_Stable_Ver}.tar.gz ${Redis_Stable_Ver}
 
         Get_OS_Bit
@@ -66,13 +66,13 @@ Install_Redis()
     fi
 
     if echo "${Cur_PHP_Version}" | grep -Eqi '^5.2.';then
-        Download_Files http://pecl.php.net/get/redis-2.2.7.tgz redis-2.2.7.tgz
+        Download_Files https://pecl.php.net/get/redis-2.2.7.tgz redis-2.2.7.tgz || return 1
         Tar_Cd redis-2.2.7.tgz redis-2.2.7
     elif echo "${Cur_PHP_Version}" | grep -Eqi '^5.[3456].';then
-        Download_Files http://pecl.php.net/get/redis-4.3.0.tgz redis-4.3.0.tgz
+        Download_Files https://pecl.php.net/get/redis-4.3.0.tgz redis-4.3.0.tgz || return 1
         Tar_Cd redis-4.3.0.tgz redis-4.3.0
     else
-        Download_Files http://pecl.php.net/get/${PHPRedis_Ver}.tgz ${PHPRedis_Ver}.tgz
+        Download_Files https://pecl.php.net/get/${PHPRedis_Ver}.tgz ${PHPRedis_Ver}.tgz || return 1
         Tar_Cd ${PHPRedis_Ver}.tgz ${PHPRedis_Ver}
     fi
     ${PHP_Path}/bin/phpize

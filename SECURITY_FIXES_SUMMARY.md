@@ -1,153 +1,34 @@
-# LNMP 2.0 安全修复总结
+# LNMP 2.0 下载链路安全记录
 
-## 修复概述
-本次修复彻底清理了LNMP 2.0项目中所有可能被投毒的下载链接，移除了所有vpser.net、vpser.com、lnmp.org域名引用，将所有下载源替换为官方安全源。
+## 当前状态
 
-## 发现的安全问题
+安装、升级和扩展安装使用同一套下载校验逻辑：
 
-### 1. php.vpszt.com 非官方PHP下载源
-**风险等级**: 高
-**问题描述**: 项目中多个文件使用了 `http://php.vpszt.com` 作为PHP下载源，这是一个非官方镜像，存在被投毒的风险。
+- 只接受 HTTPS 下载地址，并限制到官方站点或公开大学镜像域名。
+- 下载前检查 `checksums.sha256`，下载后和复用本地归档时都强制校验 SHA256。
+- 校验失败的归档会被删除；没有清单记录的归档拒绝下载。
+- 使用临时文件下载并在校验成功后原子替换，避免留下半截归档。
+- 不再允许构建系统通过 CMake 自动联网获取依赖。
+- acme.sh 使用固定发布版本和固定 SHA256，不使用可变分支归档。
+- Composer 使用固定版本和固定 SHA256，不使用可变的最新版本地址。
+- 软件仓库配置统一使用 HTTPS。
+- 生成的 Nginx SSL 模板仅启用 TLS 1.2 和 TLS 1.3，并移除弱 3DES 配置。
 
-### 2. vpser.net/vpser.com 域名引用
-**风险等级**: 高
-**问题描述**: 项目中大量使用了vpser.net和vpser.com域名，包括下载镜像、技术支持链接等，存在安全风险。
+## 镜像使用原则
 
-### 3. lnmp.org 域名引用
-**风险等级**: 中
-**问题描述**: 项目中多处引用了lnmp.org域名，包括官网链接、文档链接等。
+公开大学镜像只能作为传输源，不能替代完整性校验。镜像域名即使在允许列表中，也必须匹配清单中的归档文件名和 SHA256；版本或哈希没有登记时，功能会安全失败并提示补充可信校验值。
 
-### 4. 非官方acme.sh下载源
-**风险等级**: 中
-**问题描述**: 多个文件中使用了第三方镜像下载acme.sh，存在安全风险。
+历史第三方下载地址和未验证的分享地址不在本文档中保留，也不参与安装流程。旧版本或扩展若没有可信校验值，需要先从上游发布页核实后再加入清单。
 
-### 5. 第三方IP地理位置服务
-**风险等级**: 低
-**问题描述**: 使用了第三方IP地理位置服务来检测用户所在国家。
+## 维护要求
 
-## 修复详情
+新增下载源时必须同时完成：
 
-### 1. 修复addons.sh
-**修改前**:
-```bash
-if [ "${country}" = "CN" ]; then
-    Download_Files http://php.vpszt.com/php-${Cur_PHP_Version}.tar.bz2 php-${Cur_PHP_Version}.tar.bz2
-    if [ $? -ne 0 ]; then
-        Download_Files https://www.php.net/distributions/php-${Cur_PHP_Version}.tar.bz2 php-${Cur_PHP_Version}.tar.bz2
-    fi
-else
-    Download_Files https://www.php.net/distributions/php-${Cur_PHP_Version}.tar.bz2 php-${Cur_PHP_Version}.tar.bz2
-    if [ $? -ne 0 ]; then
-        Download_Files http://php.vpszt.com/php-${Cur_PHP_Version}.tar.bz2 php-${Cur_PHP_Version}.tar.bz2
-    fi
-fi
-```
+1. 确认地址为 HTTPS，并属于官方站点或公开大学镜像。
+2. 从上游发布页或签名材料核实归档内容。
+3. 将固定版本的 SHA256 写入 `checksums.sha256`。
+4. 运行 shell 语法检查、清单校验和下载函数回归测试。
 
-**修改后**:
-```bash
-# Always use official PHP download sources for security
-Download_Files https://www.php.net/distributions/php-${Cur_PHP_Version}.tar.bz2 php-${Cur_PHP_Version}.tar.bz2
-if [ $? -ne 0 ]; then
-    # Fallback to PHP museum for older versions
-    Download_Files http://museum.php.net/php5/php-${Cur_PHP_Version}.tar.bz2 php-${Cur_PHP_Version}.tar.bz2
-fi
-```
+## 风险边界
 
-### 2. 修复include/upgrade_php.sh
-**修改**: 同addons.sh，将php.vpszt.com替换为官方PHP下载地址
-
-### 3. 修复include/upgrade_mphp.sh  
-**修改**: 同addons.sh，将php.vpszt.com替换为官方PHP下载地址
-
-### 4. 修复upgrade1.x-2.0.sh
-**修改前**:
-```bash
-wget https://soft.vpser.net/lib/acme.sh/latest.tar.gz --prefer-family=IPv4 --no-check-certificate
-```
-
-**修改后**:
-```bash
-# Use official acme.sh GitHub repository for security
-wget https://github.com/acmesh-official/acme.sh/archive/master.tar.gz -O latest.tar.gz --prefer-family=IPv4 --no-check-certificate
-```
-
-### 5. 修复README
-**修改前**:
-```bash
-wget http://soft.vpser.net/lnmp/lnmp2.0beta.tar.gz -cO lnmp2.0beta.tar.gz && tar zxf lnmp2.0beta.tar.gz && cd lnmp2.0beta && ./install.sh {lnmp|lnmpa|lamp}
-```
-
-**修改后**:
-```bash
-wget https://lnmp.org/download/lnmp2.0.tar.gz -cO lnmp2.0.tar.gz && tar zxf lnmp2.0.tar.gz && cd lnmp2.0 && ./install.sh {lnmp|lnmpa|lamp}
-```
-
-### 6. 增强lnmp.conf安全性
-**修改**: 在lnmp.conf中添加了安全注释，说明下载镜像的安全性。
-
-## 安全改进
-
-1. **彻底清理域名引用**: 完全移除了所有vpser.net、vpser.com、lnmp.org域名引用
-2. **统一使用官方源**: 所有PHP下载都改为使用官方 `https://www.php.net/distributions/` 地址
-3. **移除第三方镜像**: 完全移除了可能被投毒的 `php.vpszt.com` 镜像
-4. **使用官方GitHub**: acme.sh改为使用官方GitHub仓库下载
-5. **简化国家检测**: 移除第三方IP地理位置服务，改用本地时区检测
-6. **更新下载镜像**: 将Download_Mirror改为使用CDN jsdelivr
-7. **添加安全注释**: 在关键配置文件中添加了安全说明
-
-## 验证结果
-
-- ✅ PHP官方下载地址 `https://www.php.net/distributions/` 已验证可用
-- ✅ PHP历史版本地址 `http://museum.php.net/php5/` 已验证可用  
-- ✅ acme.sh官方GitHub地址 `https://github.com/acmesh-official/acme.sh` 已验证可用
-- ✅ GitHub官方仓库地址 `https://github.com/licess/lnmp` 已验证可用
-
-## 建议
-
-1. **定期检查**: 建议定期检查项目中的所有下载链接，确保使用官方源
-2. **代码审查**: 在代码提交时应审查所有新增的下载链接
-3. **镜像验证**: 如需使用镜像，应验证镜像的安全性和可信度
-4. **HTTPS优先**: 优先使用HTTPS协议的下载链接
-
-## ⚠️ **重要发现：下载链接问题**
-
-在修复过程中发现，原项目依赖的下载镜像（soft.vpser.net）包含大量特定的库文件和工具，这些文件在官方源中不存在。为了彻底解决安全问题，我们采取了以下措施：
-
-### 🔧 **下载链接修复策略**
-
-1. **主要软件包使用官方源**：
-   - PHP: `https://www.php.net/distributions/`
-   - MySQL: `https://cdn.mysql.com/Downloads/`
-   - MariaDB: `https://downloads.mariadb.org/`
-   - Nginx: `https://nginx.org/download/`
-   - Apache: `https://archive.apache.org/dist/httpd/`
-
-2. **依赖库使用可信源**：
-   - libiconv: GNU FTP (`https://ftp.gnu.org/pub/gnu/libiconv/`)
-   - libmcrypt/mcrypt: SourceForge (`https://sourceforge.net/projects/mcrypt/`)
-   - jemalloc: GitHub官方仓库
-   - tcmalloc: GitHub官方仓库
-
-3. **安全措施**：
-   - 跳过可能有安全风险的第三方工具下载
-   - 移除所有Zend相关的非官方下载
-   - 禁用探针文件等可能的安全隐患
-
-### 📋 **需要用户注意的事项**
-
-1. **部分功能可能受影响**：由于移除了非官方下载源，某些扩展功能可能无法正常安装
-2. **建议测试**：在生产环境使用前，请先在测试环境验证所有功能
-3. **手动下载**：如需特定工具，建议手动从官方源下载并验证
-
-## 修复完成时间
-2025-07-23
-
-## 修复人员
-Augment Agent
-
-## 后续建议
-
-1. **定期更新**：定期检查并更新所有下载链接
-2. **安全验证**：对所有下载的文件进行哈希验证
-3. **监控日志**：监控安装过程中的下载失败情况
-4. **备用方案**：准备离线安装包作为备用方案
+SHA256 清单保护的是归档内容完整性；它不替代上游发布者签名、主机安全、构建隔离和运行时最小权限。生产环境应使用离线缓存或内部制品库，并在变更前审查清单差异。

@@ -14,7 +14,7 @@ Upgrade_Nginx()
 
     Nginx_Version=""
     echo "Current Nginx Version:${Cur_Nginx_Version}"
-    echo "You can get version number from http://nginx.org/en/download.html"
+    echo "You can get version number from https://nginx.org/en/download.html"
     read -p "Please enter nginx version you want, (example: 1.20.2): " Nginx_Version
     if [ "${Nginx_Version}" = "" ]; then
         echo "Error: You must enter a nginx version!!"
@@ -28,28 +28,10 @@ Upgrade_Nginx()
 
     echo "============================check files=================================="
     cd ${cur_dir}/src
-    if [ -s nginx-${Nginx_Version}.tar.gz ]; then
-        echo "nginx-${Nginx_Version}.tar.gz [found]"
-    else
-        echo "Notice: nginx-${Nginx_Version}.tar.gz not found!!!download now......"
-        # Try reliable CDN mirrors first for better speed
-        Download_Files https://nginx.org/download/nginx-${Nginx_Version}.tar.gz nginx-${Nginx_Version}.tar.gz
-        if [ $? -ne 0 ]; then
-            # Try GitHub mirror for mainline versions
-            Download_Files https://github.com/nginx/nginx/archive/release-${Nginx_Version}.tar.gz nginx-${Nginx_Version}.tar.gz
-        fi
-        if [ $? -ne 0 ]; then
-            # Use wget as final fallback
-            wget -c --progress=dot:giga http://nginx.org/download/nginx-${Nginx_Version}.tar.gz
-        fi
-        if [ $? -eq 0 ]; then
-            echo "Download nginx-${Nginx_Version}.tar.gz successfully!"
-        else
-            echo "You enter Nginx Version was:"${Nginx_Version}
-            Echo_Red "Error! You entered a wrong version number, please check!"
-            sleep 5
-            exit 1
-        fi
+    if ! Download_Files "https://nginx.org/download/nginx-${Nginx_Version}.tar.gz" "nginx-${Nginx_Version}.tar.gz"; then
+        echo "You enter Nginx Version was:${Nginx_Version}"
+        Echo_Red "No trusted SHA256 entry exists for this Nginx version."
+        exit 1
     fi
     echo "============================check files=================================="
 

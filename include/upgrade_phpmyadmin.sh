@@ -17,25 +17,16 @@ Upgrade_phpMyAdmin()
 
     echo "============================check files=================================="
     cd ${cur_dir}/src
-    if [ -s phpMyAdmin-${phpMyAdmin_Version}-all-languages.tar.xz ]; then
-        echo "phpMyAdmin-${phpMyAdmin_Version}-all-languages.tar.xz [found]"
-    else
-        echo "Notice: phpMyAdmin-${phpMyAdmin_Version}-all-languages.tar.xz not found!!!download now......"
-        wget -c --progress=dot:giga https://files.phpmyadmin.net/phpMyAdmin/${phpMyAdmin_Version}/phpMyAdmin-${phpMyAdmin_Version}-all-languages.tar.xz
-        if [ $? -eq 0 ]; then
-            echo "Download phpMyAdmin-${phpMyAdmin_Version}-all-languages.tar.xz successfully!"
-        else
-            echo "You enter phpMyAdmin Version was:"${phpMyAdmin_Version}
-            Echo_Red "Error! You entered a wrong version number, please check!"
-            sleep 5
-            exit 1
-        fi
+    if ! Download_Files "https://files.phpmyadmin.net/phpMyAdmin/${phpMyAdmin_Version}/phpMyAdmin-${phpMyAdmin_Version}-all-languages.tar.xz" "phpMyAdmin-${phpMyAdmin_Version}-all-languages.tar.xz"; then
+        echo "You enter phpMyAdmin Version was:${phpMyAdmin_Version}"
+        Echo_Red "No trusted SHA256 entry exists for this phpMyAdmin version."
+        exit 1
     fi
     echo "============================check files=================================="
     echo "Backup old phpMyAdmin..."
     mv ${Default_Website_Dir}/phpmyadmin ${Default_Website_Dir}/phpmyadmin${Upgrade_Date}
     echo "Uncompress phpMyAdmin-${phpMyAdmin_Version}-all-languages.tar.xz ..."
-    tar Jxf phpMyAdmin-${phpMyAdmin_Version}-all-languages.tar.xz
+    Extract_Archive "phpMyAdmin-${phpMyAdmin_Version}-all-languages.tar.xz" || return 1
     mv phpMyAdmin-${phpMyAdmin_Version}-all-languages ${Default_Website_Dir}/phpmyadmin
     \cp ${cur_dir}/conf/config.inc.php ${Default_Website_Dir}/phpmyadmin/config.inc.php
     sed -i 's/LNMPORG/LNMP.org_'`date +%s%N | head -c 13`'_VPSer.net/g' ${Default_Website_Dir}/phpmyadmin/config.inc.php

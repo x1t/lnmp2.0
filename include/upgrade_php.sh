@@ -19,7 +19,7 @@ Start_Upgrade_PHP()
     php_version=""
     Get_PHP_Ext_Dir
     echo "Current PHP Version:${Cur_PHP_Version}"
-    echo "You can get version number from http://www.php.net/"
+    echo "You can get version number from https://www.php.net/"
     read -p "Please enter a PHP Version you want: " php_version
     if [ "${php_version}" = "" ]; then
         echo "Error: You must enter a corrent php version!!"
@@ -27,35 +27,17 @@ Start_Upgrade_PHP()
     fi
     Press_Start
     cd ${cur_dir}/src
-    if [ -s php-${php_version}.tar.bz2 ]; then
-        echo "php-${php_version}.tar.bz2 [found]"
-    else
-        echo "Notice: php-$php_version.tar.bz2 not found!!!download now..."
-        Get_Country
-        # Always use official PHP download sources first for security
-        Download_Files https://www.php.net/distributions/php-${php_version}.tar.bz2 php-${php_version}.tar.bz2
-        if [ $? -ne 0 ]; then
-            # Try .edu university mirrors for better speed and reliability
-            Download_Files https://mirror.math.princeton.edu/pub/php/releases/php-${php_version}.tar.bz2 php-${php_version}.tar.bz2
-        fi
-        if [ $? -ne 0 ]; then
-            Download_Files https://mirror.cs.uchicago.edu/php/php-${php_version}.tar.bz2 php-${php_version}.tar.bz2
-        fi
-        if [ $? -ne 0 ]; then
-            # Fallback to PHP museum for older versions
-            Download_Files http://museum.php.net/php5/php-${php_version}.tar.bz2 php-${php_version}.tar.bz2
-        fi
-        if [ $? -eq 0 ]; then
-            echo "Download php-${php_version}.tar.bz2 successfully!"
-        else
-            echo "You enter PHP Version was:"${php_version}
-            Echo_Red "Error! You entered a wrong version number, please check!"
-            exit 1
+    Get_Country
+    if ! Download_Files "https://www.php.net/distributions/php-${php_version}.tar.bz2" "php-${php_version}.tar.bz2"; then
+        if ! Download_Files "https://mirror.math.princeton.edu/pub/php/releases/php-${php_version}.tar.bz2" "php-${php_version}.tar.bz2"; then
+            if ! Download_Files "https://mirror.cs.uchicago.edu/php/php-${php_version}.tar.bz2" "php-${php_version}.tar.bz2"; then
+                Download_Files "https://museum.php.net/php5/php-${php_version}.tar.bz2" "php-${php_version}.tar.bz2" || return 1
+            fi
         fi
     fi
 
     if echo "${php_version}" | grep -Eqi '^5.2.';then
-        Download_Files ${Download_Mirror}/web/phpfpm/php-${php_version}-fpm-0.5.14.diff.gz php-${php_version}-fpm-0.5.14.diff.gz
+        Download_Files "${Download_Mirror}/web/phpfpm/php-${php_version}-fpm-0.5.14.diff.gz" "php-${php_version}-fpm-0.5.14.diff.gz" || return 1
     fi
     lnmp stop
 
@@ -285,7 +267,7 @@ Upgrade_PHP_52()
     fi
     Export_PHP_Autoconf
     cd ${cur_dir}/src && rm -rf php-${php_version}
-    tar jxf php-${php_version}.tar.bz2
+    Extract_Archive "php-${php_version}.tar.bz2" || return 1
     if [ "${Stack}" = "lnmp" ]; then
         gzip -cd php-${php_version}-fpm-0.5.14.diff.gz | patch -d php-${php_version} -p1
     fi

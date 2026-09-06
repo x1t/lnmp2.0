@@ -222,23 +222,9 @@ Addons_Get_PHP_Ext_Dir()
 
 Download_PHP_Src()
 {
-     if [ -s php-${Cur_PHP_Version}.tar.bz2 ]; then
-        echo "php-${Cur_PHP_Version}.tar.bz2 [found]"
-    else
-        echo "Notice: php-${Cur_PHP_Version}.tar.bz2 not found!!!download now..."
-        Get_Country
-        # Always use official PHP download sources for security
-        Download_Files https://www.php.net/distributions/php-${Cur_PHP_Version}.tar.bz2 php-${Cur_PHP_Version}.tar.bz2
-        if [ $? -ne 0 ]; then
-            # Fallback to PHP museum for older versions
-            Download_Files http://museum.php.net/php5/php-${Cur_PHP_Version}.tar.bz2 php-${Cur_PHP_Version}.tar.bz2
-        fi
-        if [ $? -eq 0 ]; then
-            echo "Download php-${Cur_PHP_Version}.tar.bz2 successfully!"
-        else
-            Echo_Red "Error! Can't download PHP ${Cur_PHP_Version}, please check!"
-            exit 1
-        fi
+    Get_Country
+    if ! Download_Files "https://www.php.net/distributions/php-${Cur_PHP_Version}.tar.bz2" "php-${Cur_PHP_Version}.tar.bz2"; then
+        Download_Files "https://museum.php.net/php5/php-${Cur_PHP_Version}.tar.bz2" "php-${Cur_PHP_Version}.tar.bz2" || return 1
     fi
 }
 

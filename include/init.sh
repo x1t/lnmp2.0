@@ -149,9 +149,9 @@ RHEL_Modify_Source()
         echo "RHEL ${RHEL_Ver} will use aliyun centos repository..."
         if [ ! -s "/etc/yum.repos.d/Centos-${RHEL_Ver}.repo" ]; then
             if command -v curl >/dev/null 2>&1; then
-                curl http://mirrors.aliyun.com/repo/Centos-${RHEL_Ver}.repo -o /etc/yum.repos.d/Centos-${RHEL_Ver}.repo
+                curl --fail --silent --show-error --proto '=https' --tlsv1.2 https://mirrors.aliyun.com/repo/Centos-${RHEL_Ver}.repo -o /etc/yum.repos.d/Centos-${RHEL_Ver}.repo
             else
-                wget --prefer-family=IPv4 http://mirrors.aliyun.com/repo/Centos-${RHEL_Ver}.repo -O /etc/yum.repos.d/Centos-${RHEL_Ver}.repo
+                wget --prefer-family=IPv4 --https-only https://mirrors.aliyun.com/repo/Centos-${RHEL_Ver}.repo -O /etc/yum.repos.d/Centos-${RHEL_Ver}.repo
             fi
         fi
         if echo "${RHEL_Version}" | grep -Eqi "^6"; then
@@ -174,9 +174,9 @@ RHEL_Modify_Source()
 Ubuntu_Modify_Source()
 {
     if [ "${country}" = "CN" ]; then
-        OldReleasesURL='http://mirrors.ustc.edu.cn/ubuntu-old-releases/'
+        OldReleasesURL='https://mirrors.ustc.edu.cn/ubuntu-old-releases/'
     else
-        OldReleasesURL='http://old-releases.ubuntu.com/ubuntu/'
+        OldReleasesURL='https://old-releases.ubuntu.com/ubuntu/'
     fi
     CodeName=''
     if grep -Eqi "10.10" /etc/*-release || echo "${Ubuntu_Version}" | grep -Eqi '^10.10'; then
@@ -491,10 +491,6 @@ Check_Download()
             mysql8_ext="tar.xz"
             mysql8_file="${Mysql_Ver}-linux-glibc${mysql8_glibc_ver}-${DB_ARCH}.${mysql8_ext}"
             Download_Files "https://cdn.mysql.com/Downloads/MySQL-8.0/${mysql8_file}" "${mysql8_file}" || return 1
-            if [ "${Mysql_Ver}" = "mysql-8.0.46" ] && [ "${DB_ARCH}" = "x86_64" ]; then
-                echo "Verifying MySQL archive checksum..."
-                echo "367c6adbd976c0e4bcbe39bda4ea6ecf  ${mysql8_file}" | md5sum -c - || return 1
-            fi
         else
             Mysql_Ver_Short=$(echo ${Mysql_Ver} | sed 's/mysql-//' | cut -d. -f1-2)
             Download_Files "https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}.tar.gz" "${Mysql_Ver}.tar.gz" || return 1
@@ -754,38 +750,25 @@ Download_Boost()
 {
     Echo_Blue "[+] Download or use exist boost..."
     if [ "${DBSelect}" = "4" ] || echo "${mysql_version}" | grep -Eqi '^5.7.'; then
-        if [ -s "${cur_dir}/src/${Boost_Ver}.tar.bz2" ]; then
-            [[ -d "${cur_dir}/src/${Boost_Ver}" ]] && rm -rf "${cur_dir}/src/${Boost_Ver}"
-            tar jxf ${cur_dir}/src/${Boost_Ver}.tar.bz2 -C ${cur_dir}/src
-            MySQL_WITH_BOOST="-DWITH_BOOST=${cur_dir}/src/${Boost_Ver}"
-        else
-            cd ${cur_dir}/src/
-            # Try university mirrors first for better reliability
-            Download_Files https://mirrors.mit.edu/macports/distfiles/boost/${Boost_Ver}.tar.bz2 ${Boost_Ver}.tar.bz2
-            if [ $? -ne 0 ]; then
-                # Use Alibaba Cloud mirror for faster download in China
-                Download_Files https://mirrors.aliyun.com/blfs/conglomeration/boost/${Boost_Ver}.tar.bz2 ${Boost_Ver}.tar.bz2
+        if ! Download_Files "https://mirrors.mit.edu/macports/distfiles/boost/${Boost_Ver}.tar.bz2" "${cur_dir}/src/${Boost_Ver}.tar.bz2"; then
+            if ! Download_Files "https://sourceforge.net/projects/boost/files/boost/1.59.0/${Boost_Ver}.tar.bz2/download" "${cur_dir}/src/${Boost_Ver}.tar.bz2"; then
+                Download_Files "${Download_Mirror}/lib/boost/${Boost_Ver}.tar.bz2" "${cur_dir}/src/${Boost_Ver}.tar.bz2" || return 1
             fi
-            if [ $? -ne 0 ]; then
-                # Use SourceForge as backup
-                Download_Files https://sourceforge.net/projects/boost/files/boost/1.59.0/${Boost_Ver}.tar.bz2/download ${Boost_Ver}.tar.bz2
-            fi
-            if [ $? -ne 0 ]; then
-                Download_Files ${Download_Mirror}/lib/boost/${Boost_Ver}.tar.bz2 ${Boost_Ver}.tar.bz2
-            fi
-            tar jxf ${cur_dir}/src/${Boost_Ver}.tar.bz2
-            cd -
-            MySQL_WITH_BOOST="-DWITH_BOOST=${cur_dir}/src/${Boost_Ver}"
         fi
+        [[ -d "${cur_dir}/src/${Boost_Ver}" ]] && rm -rf "${cur_dir}/src/${Boost_Ver}"
+        Extract_Archive "${cur_dir}/src/${Boost_Ver}.tar.bz2" "${cur_dir}/src" || return 1
+        MySQL_WITH_BOOST="-DWITH_BOOST=${cur_dir}/src/${Boost_Ver}"
     elif [ "${DBSelect}" = "5" ] || echo "${mysql_version}" | grep -Eqi '^8.0.'; then
         Get_Boost_Ver=$(grep 'SET(BOOST_PACKAGE_NAME' cmake/boost.cmake |grep -oP '\d+(\_\d+){2}')
-        if [ -s "${cur_dir}/src/boost_${Get_Boost_Ver}.tar.bz2" ]; then
-            [[ -d "${cur_dir}/src/boost_${Get_Boost_Ver}" ]] && rm -rf "${cur_dir}/src/boost_${Get_Boost_Ver}"
-            tar jxf ${cur_dir}/src/boost_${Get_Boost_Ver}.tar.bz2 -C ${cur_dir}/src
-            MySQL_WITH_BOOST="-DWITH_BOOST=${cur_dir}/src/boost_${Get_Boost_Ver}"
-        else
-            MySQL_WITH_BOOST="-DDOWNLOAD_BOOST=1 -DWITH_BOOST=${cur_dir}/src"
+        local Boost_Package="boost_${Get_Boost_Ver}.tar.bz2"
+        if ! Download_Files "https://mirrors.mit.edu/macports/distfiles/boost/${Boost_Package}" "${cur_dir}/src/${Boost_Package}"; then
+            if ! Download_Files "https://sourceforge.net/projects/boost/files/boost/${Get_Boost_Ver//_/.}/${Boost_Package}/download" "${cur_dir}/src/${Boost_Package}"; then
+                Download_Files "${Download_Mirror}/lib/boost/${Boost_Package}" "${cur_dir}/src/${Boost_Package}" || return 1
+            fi
         fi
+        [[ -d "${cur_dir}/src/boost_${Get_Boost_Ver}" ]] && rm -rf "${cur_dir}/src/boost_${Get_Boost_Ver}"
+        Extract_Archive "${cur_dir}/src/${Boost_Package}" "${cur_dir}/src" || return 1
+        MySQL_WITH_BOOST="-DWITH_BOOST=${cur_dir}/src/boost_${Get_Boost_Ver}"
     fi
 }
 
@@ -840,7 +823,7 @@ Install_Openssl_New()
             fi
             [[ -d "${Openssl_New_Ver}" ]] && rm -rf ${Openssl_New_Ver}
             Tar_Cd ${Openssl_New_Ver}.tar.gz ${Openssl_New_Ver}
-            ./config enable-weak-ssl-ciphers -fPIC --prefix=/usr/local/openssl1.1.1 --openssldir=/usr/local/openssl1.1.1
+            ./config -fPIC --prefix=/usr/local/openssl1.1.1 --openssldir=/usr/local/openssl1.1.1
             make depend
             Make_Install
             ln -sf /usr/local/openssl1.1.1/lib/libcrypto.so.1.1 /usr/lib/
