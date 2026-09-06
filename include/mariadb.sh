@@ -14,6 +14,8 @@ MariaDB_WITHSSL()
 
 Mariadb_Sec_Setting()
 {
+    local sql_password
+
     cat > /etc/ld.so.conf.d/mariadb.conf<<EOF
     /usr/local/mariadb/lib
     /usr/local/lib
@@ -43,7 +45,7 @@ EOF
     /etc/init.d/mariadb restart
     sleep 2
 
-    /usr/local/mariadb/bin/mysqladmin -u root password "${DB_Root_Password}"
+    printf '%s\n%s\n' "${DB_Root_Password}" "${DB_Root_Password}" | /usr/local/mariadb/bin/mysqladmin -u root password
 
     /etc/init.d/mariadb restart
     
@@ -52,20 +54,18 @@ EOF
     if [ $? -ne 0 ]; then
         echo "failed, try other way..."
         /etc/init.d/mariadb restart
-        cat >~/.emptymy.cnf<<EOF
-[client]
-user=root
-password=''
-EOF
+        local empty_mysql_cnf
+        empty_mysql_cnf=$(Make_Empty_TempMycnf) || return 1
+        sql_password=$(Escape_SQL_String "${DB_Root_Password}")
         if [[ "${DBSelect}" =~ ^[89]|10$ ]] || echo "${mariadb_version}" | grep -Eqi '^10.[4-6].'; then
-            /usr/local/mariadb/bin/mysql --defaults-file=~/.emptymy.cnf -e "SET PASSWORD = PASSWORD('${DB_Root_Password}');"
+            Run_DB_Query "SET PASSWORD = PASSWORD('${sql_password}');" /usr/local/mariadb/bin/mysql "--defaults-file=${empty_mysql_cnf}"
         else
-            /usr/local/mariadb/bin/mysql --defaults-file=~/.emptymy.cnf -e "UPDATE mysql.user SET Password=PASSWORD('${DB_Root_Password}') WHERE User='root';"
+            Run_DB_Query "UPDATE mysql.user SET Password=PASSWORD('${sql_password}') WHERE User='root';" /usr/local/mariadb/bin/mysql "--defaults-file=${empty_mysql_cnf}"
         fi
         [ $? -eq 0 ] && echo "Set password Sucessfully." || echo "Set password failed!"
-        /usr/local/mariadb/bin/mysql --defaults-file=~/.emptymy.cnf -e "FLUSH PRIVILEGES;"
+        Run_DB_Query "FLUSH PRIVILEGES;" /usr/local/mariadb/bin/mysql "--defaults-file=${empty_mysql_cnf}"
         [ $? -eq 0 ] && echo "FLUSH PRIVILEGES Sucessfully." || echo "FLUSH PRIVILEGES failed!"
-        rm -f ~/.emptymy.cnf
+        rm -f -- "${empty_mysql_cnf}"
     fi
 
     Do_Query ""
@@ -105,18 +105,18 @@ Install_MariaDB_5()
 {
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "[+] Installing ${Mariadb_Ver} Using Generic Binaries..."
-        Tar_Cd ${MariaDB_FileName}.tar.gz
+        Tar_Cd "${MariaDB_FileName}.tar.gz" || return 1
         mkdir /usr/local/mariadb
         mv ${MariaDB_FileName}/* /usr/local/mariadb/
     else
         Echo_Blue "[+] Installing ${Mariadb_Ver} Using Source code..."
-        Tar_Cd ${Mariadb_Ver}.tar.gz ${Mariadb_Ver}
+        Tar_Cd "${Mariadb_Ver}.tar.gz" "${Mariadb_Ver}" || return 1
         cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mariadb -DWITH_ARIA_STORAGE_ENGINE=1 -DWITH_XTRADB_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_READLINE=1 -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1
-        Make_Install
+        Make_Install || return 1
     fi
 
-    groupadd mariadb
-    useradd -s /sbin/nologin -M -g mariadb mariadb
+    getent group mariadb >/dev/null 2>&1 || groupadd mariadb || return 1
+    id mariadb >/dev/null 2>&1 || useradd -s /sbin/nologin -M -g mariadb mariadb || return 1
 
 cat > /etc/my.cnf<<EOF
 [client]
@@ -209,18 +209,18 @@ Install_MariaDB_103()
 {
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "[+] Installing ${Mariadb_Ver} Using Generic Binaries..."
-        Tar_Cd ${MariaDB_FileName}.tar.gz
+        Tar_Cd "${MariaDB_FileName}.tar.gz" || return 1
         mkdir /usr/local/mariadb
         mv ${MariaDB_FileName}/* /usr/local/mariadb/
     else
         Echo_Blue "[+] Installing ${Mariadb_Ver} Using Source code..."
-        Tar_Cd ${Mariadb_Ver}.tar.gz ${Mariadb_Ver}
+        Tar_Cd "${Mariadb_Ver}.tar.gz" "${Mariadb_Ver}" || return 1
         cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mariadb -DWITH_ARIA_STORAGE_ENGINE=1 -DWITH_XTRADB_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_READLINE=1 -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 -DWITHOUT_TOKUDB=1
-        Make_Install
+        Make_Install || return 1
     fi
 
-    groupadd mariadb
-    useradd -s /sbin/nologin -M -g mariadb mariadb
+    getent group mariadb >/dev/null 2>&1 || groupadd mariadb || return 1
+    id mariadb >/dev/null 2>&1 || useradd -s /sbin/nologin -M -g mariadb mariadb || return 1
 
 cat > /etc/my.cnf<<EOF
 [client]
@@ -312,19 +312,19 @@ Install_MariaDB_104()
 {
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "[+] Installing ${Mariadb_Ver} Using Generic Binaries..."
-        Tar_Cd ${MariaDB_FileName}.tar.gz
+        Tar_Cd "${MariaDB_FileName}.tar.gz" || return 1
         mkdir /usr/local/mariadb
         mv ${MariaDB_FileName}/* /usr/local/mariadb/
     else
         Echo_Blue "[+] Installing ${Mariadb_Ver} Using Source code..."
-        Tar_Cd ${Mariadb_Ver}.tar.gz ${Mariadb_Ver}
+        Tar_Cd "${Mariadb_Ver}.tar.gz" "${Mariadb_Ver}" || return 1
         patch -p1 < ${cur_dir}/src/patch/mariadb_10.4_install_db.patch
         cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mariadb -DMYSQL_UNIX_ADDR=/tmp/mysql.sock -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_READLINE=1 -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 -DWITHOUT_TOKUDB=1
-        Make_Install
+        Make_Install || return 1
     fi
 
-    groupadd mariadb
-    useradd -s /sbin/nologin -M -g mariadb mariadb
+    getent group mariadb >/dev/null 2>&1 || groupadd mariadb || return 1
+    id mariadb >/dev/null 2>&1 || useradd -s /sbin/nologin -M -g mariadb mariadb || return 1
 
 cat > /etc/my.cnf<<EOF
 [client]
@@ -416,19 +416,19 @@ Install_MariaDB_105()
 {
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "[+] Installing ${Mariadb_Ver} Using Generic Binaries..."
-        Tar_Cd ${MariaDB_FileName}.tar.gz
+        Tar_Cd "${MariaDB_FileName}.tar.gz" || return 1
         mkdir /usr/local/mariadb
         mv ${MariaDB_FileName}/* /usr/local/mariadb/
     else
         Echo_Blue "[+] Installing ${Mariadb_Ver} Using Source code..."
         rm -f /etc/my.cnf
-        Tar_Cd ${Mariadb_Ver}.tar.gz ${Mariadb_Ver}
+        Tar_Cd "${Mariadb_Ver}.tar.gz" "${Mariadb_Ver}" || return 1
         cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mariadb -DMYSQL_UNIX_ADDR=/tmp/mysql.sock -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_READLINE=1 -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 -DWITHOUT_TOKUDB=1
-        Make_Install
+        Make_Install || return 1
     fi
 
-    groupadd mariadb
-    useradd -s /sbin/nologin -M -g mariadb mariadb
+    getent group mariadb >/dev/null 2>&1 || groupadd mariadb || return 1
+    id mariadb >/dev/null 2>&1 || useradd -s /sbin/nologin -M -g mariadb mariadb || return 1
 
 cat > /etc/my.cnf<<EOF
 [client]
@@ -520,19 +520,19 @@ Install_MariaDB_106()
 {
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "[+] Installing ${Mariadb_Ver} Using Generic Binaries..."
-        Tar_Cd ${MariaDB_FileName}.tar.gz
+        Tar_Cd "${MariaDB_FileName}.tar.gz" || return 1
         mkdir /usr/local/mariadb
         mv ${MariaDB_FileName}/* /usr/local/mariadb/
     else
         Echo_Blue "[+] Installing ${Mariadb_Ver} Using Source code..."
         rm -f /etc/my.cnf
-        Tar_Cd ${Mariadb_Ver}.tar.gz ${Mariadb_Ver}
+        Tar_Cd "${Mariadb_Ver}.tar.gz" "${Mariadb_Ver}" || return 1
         cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mariadb -DMYSQL_UNIX_ADDR=/tmp/mysql.sock -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_READLINE=1 -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 -DWITHOUT_TOKUDB=1
-        Make_Install
+        Make_Install || return 1
     fi
 
-    groupadd mariadb
-    useradd -s /sbin/nologin -M -g mariadb mariadb
+    getent group mariadb >/dev/null 2>&1 || groupadd mariadb || return 1
+    id mariadb >/dev/null 2>&1 || useradd -s /sbin/nologin -M -g mariadb mariadb || return 1
 
 cat > /etc/my.cnf<<EOF
 [client]

@@ -57,12 +57,21 @@ case "$1" in
         ${0} start
         ;;
     kill)
-        echo "force kill redis server..."
-        killall redis-server
-        if [ "$?"="0" ]; then
-            echo " done"
+        echo "Force stopping the Redis server managed by this service..."
+        if [ -f "$PIDFILE" ]; then
+            PID=$(cat "$PIDFILE")
+            if [[ "$PID" =~ ^[0-9]+$ ]] && [ "$(ps -p "$PID" -o comm= 2>/dev/null | tr -d ' ')" = "redis-server" ]; then
+                kill "$PID" >/dev/null 2>&1
+                if [ "$?" -eq 0 ]; then
+                    echo " done"
+                else
+                    echo " failed"
+                fi
+            else
+                echo " failed: PID file does not identify a Redis server"
+            fi
         else
-            echo " failed"
+            echo " failed: Redis PID file not found"
         fi
         ;;
     status)

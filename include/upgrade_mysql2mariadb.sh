@@ -4,7 +4,7 @@ Backup_MySQL2()
 {
     echo "Starting backup all databases..."
     echo "If the database is large, the backup time will be longer."
-    /usr/local/mysql/bin/mysqldump --defaults-file=~/.my.cnf --all-databases > /root/mysql_all_backup${Upgrade_Date}.sql
+    /usr/local/mysql/bin/mysqldump "--defaults-file=${HOME:-/root}/.my.cnf" --all-databases > "/root/mysql_all_backup${Upgrade_Date}.sql"
     if [ $? -eq 0 ]; then
         echo "MySQL databases backup successfully.";
     else
@@ -140,12 +140,12 @@ Upgrade_MySQL2MariaDB()
 
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "[+] Starting upgrade mariadb-${Mariadb_Ver} Using Generic Binaries..."
-        Tar_Cd ${MariaDB_FileName}.tar.gz
+        Tar_Cd "${MariaDB_FileName}.tar.gz" || return 1
         mkdir /usr/local/mariadb
         mv ${MariaDB_FileName}/* /usr/local/mariadb/
     else
         Echo_Blue "[+] Starting upgrade ${Mariadb_Ver} Using Source code..."
-        Tar_Cd mariadb-${mariadb_version}.tar.gz mariadb-${mariadb_version}
+        Tar_Cd "mariadb-${mariadb_version}.tar.gz" "mariadb-${mariadb_version}" || return 1
         MariaDB_WITHSSL
         if echo "${mariadb_version}" | grep -Eqi '^10.[5-9]|1[01].';then
             cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mariadb -DMYSQL_UNIX_ADDR=/tmp/mysql.sock -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_READLINE=1 -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 -DWITHOUT_TOKUDB=1
@@ -157,7 +157,7 @@ Upgrade_MySQL2MariaDB()
         else
             cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mariadb -DWITH_ARIA_STORAGE_ENGINE=1 -DWITH_XTRADB_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_READLINE=1 -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 ${MariaDBWITHSSL}
         fi
-        Make_Install
+        Make_Install || return 1
     fi
 
     groupadd mariadb
@@ -253,11 +253,11 @@ EOF
     /etc/init.d/mariadb start
 
     echo "Restore backup databases..."
-    /usr/local/mariadb/bin/mysql --defaults-file=~/.my.cnf < /root/mysql_all_backup${Upgrade_Date}.sql
+    /usr/local/mariadb/bin/mysql "--defaults-file=${HOME:-/root}/.my.cnf" < "/root/mysql_all_backup${Upgrade_Date}.sql"
     [ $? -eq 0 ] && echo "MariaDB databases import successfully." || echo "MariaDB databases import failed,Please import databases manually!"
 
     echo "Repair databases..."
-    /usr/local/mariadb/bin/mysql_upgrade -u root -p${DB_Root_Password}
+    /usr/local/mariadb/bin/mysql_upgrade "--defaults-file=${HOME:-/root}/.my.cnf" -u root
 
     echo "Add to autostart..."
     StartUp mariadb

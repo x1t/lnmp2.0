@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
+umask 077
 export PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
+cd -- "${SCRIPT_DIR}" || exit 1
 
 # Check if user is root
 if [ $(id -u) != "0" ]; then
@@ -7,7 +11,7 @@ if [ $(id -u) != "0" ]; then
     exit 1
 fi
 
-cur_dir=$(pwd)
+cur_dir="${SCRIPT_DIR}"
 isSSL=$1
 
 . lnmp.conf
@@ -56,14 +60,6 @@ Upgrade_Dependent()
                 yum -y install oracle-epel-release
             else
                 yum -y install epel-release
-                Get_Country
-                if [ "${country}" = "CN" ]; then
-                    sed -e 's!^metalink=!#metalink=!g' \
-                        -e 's!^#baseurl=!baseurl=!g' \
-                        -e 's!//download\.fedoraproject\.org/pub!//mirrors.ustc.edu.cn!g' \
-                        -e 's!//download\.example/pub!//mirrors.ustc.edu.cn!g' \
-                        -i /etc/yum.repos.d/epel*.repo
-                fi
             fi
             yum -y install oniguruma oniguruma-devel
             if [ "${CheckMirror}" = "n" ]; then
@@ -184,7 +180,7 @@ if [ "${isSSL}" == "ssl" ]; then
             Acme_Archive="acme.sh-${Acme_Version}.tar.gz"
             Acme_SHA256='e5f8e187bbf5251e0cd8891f2622daab9850366bd17bea9f92c2fe2ee091fd32'
             rm -f -- "${Acme_Archive}"
-            Download_Files "https://github.com/acmesh-official/acme.sh/archive/refs/tags/${Acme_Version}.tar.gz" "${Acme_Archive}" || exit 1
+            Download_Files "https://github.com/acmesh-official/acme.sh/archive/refs/tags/${Acme_Version}.tar.gz" "${Acme_Archive}" "${Acme_SHA256}" || exit 1
             Extract_Archive "${Acme_Archive}" . "${Acme_SHA256}" || exit 1
             cd "acme.sh-${Acme_Version}" || exit 1
             ./acme.sh --install --log --home /usr/local/acme.sh --certhome /usr/local/nginx/conf/ssl -m ${email_address}
@@ -303,7 +299,7 @@ if [ "${isSSL}" == "ssl" ]; then
             Acme_Archive="acme.sh-${Acme_Version}.tar.gz"
             Acme_SHA256='e5f8e187bbf5251e0cd8891f2622daab9850366bd17bea9f92c2fe2ee091fd32'
             rm -f -- "${Acme_Archive}"
-            Download_Files "https://github.com/acmesh-official/acme.sh/archive/refs/tags/${Acme_Version}.tar.gz" "${Acme_Archive}" || exit 1
+            Download_Files "https://github.com/acmesh-official/acme.sh/archive/refs/tags/${Acme_Version}.tar.gz" "${Acme_Archive}" "${Acme_SHA256}" || exit 1
             Extract_Archive "${Acme_Archive}" . "${Acme_SHA256}" || exit 1
             cd "acme.sh-${Acme_Version}" || exit 1
             ./acme.sh --install --log --home /usr/local/acme.sh --certhome /usr/local/apache/conf/ssl -m ${email_address}

@@ -11,36 +11,41 @@
 #
  
 [base]
-name=CentOS-8.5.2111 - Base - mirrors.aliyun.com
-baseurl=https://mirrors.aliyun.com/centos-vault/8.5.2111/BaseOS/$basearch/os/
-gpgcheck=0
-gpgkey=https://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-Official
+name=CentOS-8.5.2111 - Base - mirror.lt.ucsc.edu
+baseurl=https://mirror.lt.ucsc.edu/centos/8.5.2111/BaseOS/$basearch/os/
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official
  
 #additional packages that may be useful
 [extras]
-name=CentOS-8.5.2111 - Extras - mirrors.aliyun.com
-baseurl=https://mirrors.aliyun.com/centos-vault/8.5.2111/extras/$basearch/os/
-gpgcheck=0
-gpgkey=https://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-Official
+name=CentOS-8.5.2111 - Extras - mirror.lt.ucsc.edu
+baseurl=https://mirror.lt.ucsc.edu/centos/8.5.2111/extras/$basearch/os/
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official
  
 #additional packages that extend functionality of existing packages
 [centosplus]
-name=CentOS-8.5.2111 - Plus - mirrors.aliyun.com
-baseurl=https://mirrors.aliyun.com/centos-vault/8.5.2111/centosplus/$basearch/os/
-gpgcheck=0
+name=CentOS-8.5.2111 - Plus - mirror.lt.ucsc.edu
+baseurl=https://mirror.lt.ucsc.edu/centos/8.5.2111/centosplus/$basearch/os/
+gpgcheck=1
+repo_gpgcheck=1
 enabled=0
-gpgkey=https://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-Official
+gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official
  
 [PowerTools]
-name=CentOS-8.5.2111 - PowerTools - mirrors.aliyun.com
-baseurl=https://mirrors.aliyun.com/centos-vault/8.5.2111/PowerTools/$basearch/os/
-gpgcheck=0
+name=CentOS-8.5.2111 - PowerTools - mirror.lt.ucsc.edu
+baseurl=https://mirror.lt.ucsc.edu/centos/8.5.2111/PowerTools/$basearch/os/
+gpgcheck=1
+repo_gpgcheck=1
 enabled=0
-gpgkey=https://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-Official
+gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official
 
 
 [AppStream]
-name=CentOS-8.5.2111 - AppStream - mirrors.aliyun.com
-baseurl=https://mirrors.aliyun.com/centos-vault/8.5.2111/AppStream/$basearch/os/
-gpgcheck=0
-gpgkey=https://mirrors.aliyun.com/centos/RPM-GPG-KEY-CentOS-Official
+name=CentOS-8.5.2111 - AppStream - mirror.lt.ucsc.edu
+baseurl=https://mirror.lt.ucsc.edu/centos/8.5.2111/AppStream/$basearch/os/
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-Official

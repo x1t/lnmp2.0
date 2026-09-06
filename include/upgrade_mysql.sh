@@ -4,7 +4,7 @@ Backup_MySQL()
 {
     echo "Starting backup all databases..."
     echo "If the database is large, the backup time will be longer."
-    /usr/local/mysql/bin/mysqldump --defaults-file=~/.my.cnf --all-databases > /root/mysql_all_backup${Upgrade_Date}.sql
+    /usr/local/mysql/bin/mysqldump "--defaults-file=${HOME:-/root}/.my.cnf" --all-databases > "/root/mysql_all_backup${Upgrade_Date}.sql"
     if [ $? -eq 0 ]; then
         echo "MySQL databases backup successfully.";
     else
@@ -25,7 +25,7 @@ Backup_MySQL()
 
 Upgrade_MySQL51()
 {
-    Tar_Cd mysql-${mysql_version}.tar.gz mysql-${mysql_version}
+    Tar_Cd "mysql-${mysql_version}.tar.gz" "mysql-${mysql_version}" || return 1
     MySQL_Gcc7_Patch
     if [ $InstallInnodb = "y" ]; then
         ./configure --prefix=/usr/local/mysql --with-extra-charsets=complex --enable-thread-safe-client --enable-assembler --with-mysqld-ldflags=-all-static --with-charset=utf8 --enable-thread-safe-client --with-big-tables --with-readline --with-ssl --with-embedded-server --enable-local-infile --with-plugins=innobase ${MySQL51MAOpt}
@@ -33,7 +33,7 @@ Upgrade_MySQL51()
         ./configure --prefix=/usr/local/mysql --with-extra-charsets=complex --enable-thread-safe-client --enable-assembler --with-mysqld-ldflags=-all-static --with-charset=utf8 --enable-thread-safe-client --with-big-tables --with-readline --with-ssl --with-embedded-server --enable-local-infile ${MySQL51MAOpt}
     fi
     sed -i '/set -ex;/,/done/d' Makefile
-    Make_Install
+        Make_Install || return 1
 
     groupadd mysql
     useradd -s /sbin/nologin -M -g mysql mysql
@@ -126,7 +126,7 @@ Upgrade_MySQL55()
 {
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "Starting upgrade MySQL ${mysql_version} Using Generic Binaries..."
-        Tar_Cd ${mysql_src}
+        Tar_Cd "${mysql_src}" || return 1
         mkdir /usr/local/mysql
         mv mysql-${mysql_version}-linux-glibc2.12-${DB_ARCH}/* /usr/local/mysql/
     else
@@ -136,7 +136,7 @@ Upgrade_MySQL55()
         else
             MySQL_WITH_SSL=''
         fi
-        Tar_Cd mysql-${mysql_version}.tar.gz mysql-${mysql_version}
+    Tar_Cd "mysql-${mysql_version}.tar.gz" "mysql-${mysql_version}" || return 1
         MySQL_ARM_Patch
         if  g++ -dM -E -x c++ /dev/null | grep -F __cplusplus | cut -d' ' -f3 | grep -Eqi "^2017|202[0-9]"; then
             sed -i '1s/^/set(CMAKE_CXX_STANDARD 11)\n/' CMakeLists.txt
@@ -145,7 +145,7 @@ Upgrade_MySQL55()
             sed -i 's@^INCLUDE(cmake/abi_check.cmake)@#INCLUDE(cmake/abi_check.cmake)@' CMakeLists.txt
         fi
         cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_READLINE=1 -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_SSL}
-        Make_Install
+        Make_Install || return 1
     fi
 
     groupadd mysql
@@ -241,7 +241,7 @@ Upgrade_MySQL56()
 {
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "Starting upgrade MySQL ${mysql_version} Using Generic Binaries..."
-        Tar_Cd ${mysql_src}
+        Tar_Cd "${mysql_src}" || return 1
         mkdir /usr/local/mysql
         mv mysql-${mysql_version}-linux-glibc2.12-${DB_ARCH}/* /usr/local/mysql/
     else
@@ -252,7 +252,7 @@ Upgrade_MySQL56()
         else
             MySQL_WITH_SSL=''
         fi
-        Tar_Cd mysql-${mysql_version}.tar.gz mysql-${mysql_version}
+    Tar_Cd "mysql-${mysql_version}.tar.gz" "mysql-${mysql_version}" || return 1
         if  g++ -dM -E -x c++ /dev/null | grep -F __cplusplus | cut -d' ' -f3 | grep -Eqi "^2017|202[0-9]"; then
             sed -i '1s/^/set(CMAKE_CXX_STANDARD 11)\n/' CMakeLists.txt
         fi
@@ -260,7 +260,7 @@ Upgrade_MySQL56()
             sed -i 's@^INCLUDE(cmake/abi_check.cmake)@#INCLUDE(cmake/abi_check.cmake)@' CMakeLists.txt
         fi
         cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_SSL}
-        Make_Install
+        Make_Install || return 1
     fi
 
     groupadd mysql
@@ -388,7 +388,7 @@ Upgrade_MySQL57()
 {
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "Starting upgrade MySQL ${mysql_version} Using Generic Binaries..."
-        Tar_Cd ${mysql_src}
+        Tar_Cd "${mysql_src}" || return 1
         mkdir /usr/local/mysql
         mv mysql-${mysql_version}-linux-glibc2.12-${DB_ARCH}/* /usr/local/mysql/
     else
@@ -399,13 +399,13 @@ Upgrade_MySQL57()
         else
             MySQL_WITH_SSL=''
         fi
-        Tar_Cd ${mysql_src} mysql-${mysql_version}
-        Install_Boost
+        Tar_Cd "${mysql_src}" "mysql-${mysql_version}" || return 1
+        Install_Boost || return 1
         if echo "${Rocky_Version}" | grep -Eqi "^9"; then
             sed -i 's@^INCLUDE(cmake/abi_check.cmake)@#INCLUDE(cmake/abi_check.cmake)@' CMakeLists.txt
         fi
         cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_SSL} ${MySQL_WITH_BOOST}
-        Make_Install
+        Make_Install || return 1
     fi
 
     groupadd mysql
@@ -503,13 +503,13 @@ Upgrade_MySQL80()
         Echo_Blue "Starting upgrade MySQL ${mysql_version} Using Generic Binaries..."
         mysql8_file=$(Get_MySQL_Binary_File "mysql-${mysql_version}" "${DB_ARCH}") || return 1
         mysql8_dir="${mysql8_file%.tar.*}"
-        Tar_Cd "${mysql_src}"
+    Tar_Cd "${mysql_src}" || return 1
         mkdir -p /usr/local/mysql
         mv "${mysql8_dir}"/* /usr/local/mysql/
     else
         Echo_Blue "Starting upgrade MySQL ${mysql_version} Using Source code..."
-        Tar_Cd "${mysql_src}" "mysql-${mysql_version}"
-        Install_Boost
+    Tar_Cd "${mysql_src}" "mysql-${mysql_version}" || return 1
+        Install_Boost || return 1
         mkdir build && cd build || return 1
         cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_BOOST}
         Make_Install || return 1
@@ -615,7 +615,7 @@ Restore_Start_MySQL()
     /etc/init.d/mysql start
 
     echo "Restore backup databases..."
-    /usr/local/mysql/bin/mysql --defaults-file=~/.my.cnf < /root/mysql_all_backup${Upgrade_Date}.sql
+    /usr/local/mysql/bin/mysql "--defaults-file=${HOME:-/root}/.my.cnf" < "/root/mysql_all_backup${Upgrade_Date}.sql"
     echo "Repair databases..."
     MySQL_Ver_Com=$(${cur_dir}/include/version_compare 8.0.16 ${mysql_version})
     if [ "${MySQL_Ver_Com}" != "1" ]; then
@@ -624,9 +624,9 @@ Restore_Start_MySQL()
         /usr/local/mysql/bin/mysqld --user=mysql --upgrade=FORCE &
         echo "Waiting for upgrade to start..."
         sleep 180
-        /usr/local/mysql/bin/mysqladmin --defaults-file=~/.my.cnf shutdown
+        /usr/local/mysql/bin/mysqladmin "--defaults-file=${HOME:-/root}/.my.cnf" shutdown
     else
-        /usr/local/mysql/bin/mysql_upgrade -u root -p${DB_Root_Password}
+        /usr/local/mysql/bin/mysql_upgrade "--defaults-file=${HOME:-/root}/.my.cnf" -u root
     fi
 
     /etc/init.d/mysql stop

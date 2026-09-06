@@ -12,6 +12,18 @@ Check_Stack_Choose()
     fi
 }
 
+Download_PHP_Source_Archive()
+{
+    local requested_version="$1"
+    local version="${requested_version#php-}"
+    local archive="php-${version}.tar.bz2"
+
+    if Download_Files "https://www.php.net/distributions/${archive}" "${archive}"; then
+        return 0
+    fi
+    Download_Files "https://museum.php.net/php5/${archive}" "${archive}" || return 1
+}
+
 Start_Upgrade_PHP()
 {
     Check_Stack_Choose
@@ -25,6 +37,10 @@ Start_Upgrade_PHP()
         echo "Error: You must enter a corrent php version!!"
         exit 1
     fi
+    if echo "${php_version}" | grep -Eqi '^5\.2\.'; then
+        Echo_Red "PHP 5.2 upgrades are disabled because the historical FPM patch has no trusted maintained source."
+        return 1
+    fi
     Press_Start
     cd ${cur_dir}/src
     Get_Country
@@ -36,9 +52,6 @@ Start_Upgrade_PHP()
         fi
     fi
 
-    if echo "${php_version}" | grep -Eqi '^5.2.';then
-        Download_Files "${Download_Mirror}/web/phpfpm/php-${php_version}-fpm-0.5.14.diff.gz" "php-${php_version}-fpm-0.5.14.diff.gz" || return 1
-    fi
     lnmp stop
 
     if [ "${Stack}" = "lnmp" ]; then
@@ -107,20 +120,11 @@ Install_PHP_Dependent()
         else
             yum -y install epel-release
             # Use .edu university mirrors for better reliability
-            if [ "${country}" = "CN" ]; then
-                sed -e 's!^metalink=!#metalink=!g' \
-                    -e 's!^#baseurl=!baseurl=!g' \
-                    -e 's!//download\.fedoraproject\.org/pub!//mirror.chpc.utah.edu!g' \
-                    -e 's!//download\.example/pub!//mirror.chpc.utah.edu!g' \
-                    -i /etc/yum.repos.d/epel*.repo
-            else
-                # Use university mirrors for international users
-                sed -e 's!^metalink=!#metalink=!g' \
-                    -e 's!^#baseurl=!baseurl=!g' \
-                    -e 's!//download\.fedoraproject\.org/pub!//mirror.chpc.utah.edu!g' \
-                    -e 's!//download\.example/pub!//mirror.chpc.utah.edu!g' \
-                    -i /etc/yum.repos.d/epel*.repo
-            fi
+            # Use a public university mirror and keep the package signature checks.
+            sed -e 's!^metalink=!#metalink=!g' \
+                -e 's!^#baseurl=!baseurl=!g' \
+                -e 's!//download\.fedoraproject\.org/pub!//mirror.chpc.utah.edu!g' \
+                -i /etc/yum.repos.d/epel*.repo
         fi
         # Install PHP 8.4 required dependencies with minimum versions
         echo "Installing oniguruma (required for PHP 8.4 mbstring)..."
@@ -260,6 +264,9 @@ Check_PHP_Upgrade_Files()
 
 Upgrade_PHP_52()
 {
+    Echo_Red "PHP 5.2 upgrades are disabled because the historical FPM patch has no trusted maintained source."
+    return 1
+
     if [ ${DB_Name} == "None" ]; then
         echo "MySQL or MariaDB not found!"
         exit 1
@@ -309,13 +316,13 @@ Upgrade_PHP_52()
         LNMP_PHP_Opt
     fi
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_53()
 {
     Echo_Blue "Start install php-${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     patch -p1 < ${cur_dir}/src/patch/php-5.3-multipart-form-data.patch
     if [ "${Stack}" = "lnmp" ]; then
         ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --enable-fpm --with-fpm-user=www --with-fpm-group=www --with-mysql=mysqlnd --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv-dir --with-freetype-dir=/usr/local/freetype --with-jpeg-dir --with-png-dir --with-zlib --with-libxml-dir=/usr --enable-xml --disable-rpath --enable-magic-quotes --enable-safe-mode --enable-bcmath --enable-shmop --enable-sysvsem --enable-inline-optimization ${with_curl} --enable-mbregex --enable-mbstring --with-mcrypt --enable-ftp --with-gd --enable-gd-native-ttf ${with_openssl} --with-mhash --enable-pcntl --enable-sockets --with-xmlrpc --enable-zip --enable-soap --with-gettext ${with_fileinfo} ${PHP_Buildin_Option} ${PHP_Modules_Options}
@@ -341,7 +348,7 @@ Upgrade_PHP_53()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file......"
@@ -379,13 +386,13 @@ EOF
 fi
 
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_54()
 {
     Echo_Blue "Start install php-${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     if [ "${Stack}" = "lnmp" ]; then
         ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --enable-fpm --with-fpm-user=www --with-fpm-group=www --with-mysql=mysqlnd --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv-dir --with-freetype-dir=/usr/local/freetype --with-jpeg-dir --with-png-dir --with-zlib --with-libxml-dir=/usr --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem --enable-inline-optimization ${with_curl} --enable-mbregex --enable-mbstring --with-mcrypt --enable-ftp --with-gd --enable-gd-native-ttf ${with_openssl} --with-mhash --enable-pcntl --enable-sockets --with-xmlrpc --enable-zip --enable-soap --with-gettext ${with_fileinfo} --enable-intl --with-xsl ${PHP_Buildin_Option} ${PHP_Modules_Options}
     else
@@ -411,7 +418,7 @@ Upgrade_PHP_54()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file......"
@@ -449,13 +456,13 @@ EOF
 fi
 
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_556()
 {
     Echo_Blue "Start install php-${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     if [ "${ARCH}" = "aarch64" ]; then
         patch -p1 < ${cur_dir}/src/patch/php-5.5-5.6-asm-aarch64.patch
     fi
@@ -486,7 +493,7 @@ Upgrade_PHP_556()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file......"
@@ -524,13 +531,13 @@ EOF
 fi
 
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_7()
 {
     Echo_Blue "[+] Installing ${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     if echo "${php_version}" | grep -Eqi '^7.1.';then
         PHP_Openssl3_Patch
         PHP_ICU70_Patch
@@ -562,7 +569,7 @@ Upgrade_PHP_7()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -602,13 +609,13 @@ fi
         sed -i '/^LoadModule php5_module/d' /usr/local/apache/conf/httpd.conf
     fi
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_72()
 {
     Echo_Blue "[+] Installing ${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     PHP_Openssl3_Patch
     PHP_ICU70_Patch
     if [ "${Stack}" = "lnmp" ]; then
@@ -635,7 +642,7 @@ Upgrade_PHP_72()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -675,13 +682,13 @@ fi
         sed -i '/^LoadModule php5_module/d' /usr/local/apache/conf/httpd.conf
     fi
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_73()
 {
     Echo_Blue "[+] Installing ${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     PHP_Openssl3_Patch
     PHP_ICU70_Patch
     if [ "${Stack}" = "lnmp" ]; then
@@ -708,7 +715,7 @@ Upgrade_PHP_73()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -748,14 +755,14 @@ fi
         sed -i '/^LoadModule php5_module/d' /usr/local/apache/conf/httpd.conf
     fi
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_74()
 {
-    Install_Libzip
+    Install_Libzip || return 1
     Echo_Blue "[+] Installing ${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     PHP_Openssl3_Patch
     if [ "${Stack}" = "lnmp" ]; then
         ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --enable-fpm --with-fpm-user=www --with-fpm-group=www --enable-mysqlnd --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv-dir --with-freetype=/usr/local/freetype --with-jpeg --with-png --with-zlib --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem --enable-inline-optimization ${with_curl} --enable-mbregex --enable-mbstring --enable-intl --enable-pcntl --enable-ftp --enable-gd ${with_openssl} --with-mhash --enable-pcntl --enable-sockets --with-xmlrpc --with-zip --without-libzip --enable-soap --with-gettext ${with_fileinfo} --enable-opcache --with-xsl --with-pear --with-webp ${PHP_Buildin_Option} ${PHP_Modules_Options}
@@ -781,7 +788,7 @@ Upgrade_PHP_74()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -821,14 +828,14 @@ fi
         sed -i '/^LoadModule php5_module/d' /usr/local/apache/conf/httpd.conf
     fi
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_80()
 {
-    Install_Libzip
+    Install_Libzip || return 1
     Echo_Blue "[+] Installing ${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     PHP_Openssl3_Patch
     if [ "${Stack}" = "lnmp" ]; then
         ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --enable-fpm --with-fpm-user=www --with-fpm-group=www --enable-mysqlnd --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv=/usr/local --with-freetype=/usr/local/freetype --with-jpeg --with-zlib --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem ${with_curl} --enable-mbregex --enable-mbstring --enable-intl --enable-pcntl --enable-ftp --enable-gd ${with_openssl} --with-mhash --enable-pcntl --enable-sockets --with-zip --enable-soap --with-gettext ${with_fileinfo} --enable-opcache --with-xsl --with-pear --with-webp ${PHP_Buildin_Option} ${PHP_Modules_Options}
@@ -854,7 +861,7 @@ Upgrade_PHP_80()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -895,14 +902,14 @@ fi
         sed -i '/^LoadModule php7_module/d' /usr/local/apache/conf/httpd.conf
     fi
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_81()
 {
-    Install_Libzip
+    Install_Libzip || return 1
     Echo_Blue "[+] Installing ${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     if [ "${Stack}" = "lnmp" ]; then
         ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --enable-fpm --with-fpm-user=www --with-fpm-group=www --enable-mysqlnd --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv=/usr/local --with-freetype=/usr/local/freetype --with-jpeg --with-zlib --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem ${with_curl} --enable-mbregex --enable-mbstring --enable-intl --enable-pcntl --enable-ftp --enable-gd ${with_openssl} --with-mhash --enable-pcntl --enable-sockets --with-zip --enable-soap --with-gettext ${with_fileinfo} --enable-opcache --with-xsl --with-pear --with-webp ${PHP_Buildin_Option} ${PHP_Modules_Options}
     else
@@ -927,7 +934,7 @@ Upgrade_PHP_81()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -968,14 +975,14 @@ fi
         sed -i '/^LoadModule php7_module/d' /usr/local/apache/conf/httpd.conf
     fi
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_82()
 {
-    Install_Libzip
+    Install_Libzip || return 1
     Echo_Blue "[+] Installing ${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     if [ "${Stack}" = "lnmp" ]; then
         ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --enable-fpm --with-fpm-user=www --with-fpm-group=www --enable-mysqlnd --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv=/usr/local --with-freetype=/usr/local/freetype --with-jpeg --with-zlib --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem ${with_curl} --enable-mbregex --enable-mbstring --enable-intl --enable-pcntl --enable-ftp --enable-gd ${with_openssl} --with-mhash --enable-pcntl --enable-sockets --with-zip --enable-soap --with-gettext ${with_fileinfo} --enable-opcache --with-xsl --with-pear --with-webp ${PHP_Buildin_Option} ${PHP_Modules_Options}
     else
@@ -1000,7 +1007,7 @@ Upgrade_PHP_82()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -1041,14 +1048,14 @@ fi
         sed -i '/^LoadModule php7_module/d' /usr/local/apache/conf/httpd.conf
     fi
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_83()
 {
-    Install_Libzip
+    Install_Libzip || return 1
     Echo_Blue "[+] Installing ${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     if [ "${Stack}" = "lnmp" ]; then
         ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --enable-fpm --with-fpm-user=www --with-fpm-group=www --enable-mysqlnd --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv=/usr/local --with-freetype=/usr/local/freetype --with-jpeg --with-zlib --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem ${with_curl} --enable-mbregex --enable-mbstring --enable-intl --enable-pcntl --enable-ftp --enable-gd ${with_openssl} --with-mhash --enable-pcntl --enable-sockets --with-zip --enable-soap --with-gettext ${with_fileinfo} --enable-opcache --with-xsl --with-pear --with-webp ${PHP_Buildin_Option} ${PHP_Modules_Options}
     else
@@ -1073,7 +1080,7 @@ Upgrade_PHP_83()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -1114,15 +1121,15 @@ fi
         sed -i '/^LoadModule php7_module/d' /usr/local/apache/conf/httpd.conf
     fi
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP_84()
 {
-    Install_Libzip
+    Install_Libzip || return 1
     Check_PHP84_Dependencies
     Echo_Blue "[+] Installing ${php_version}"
-    Tar_Cd php-${php_version}.tar.bz2 php-${php_version}
+    Tar_Cd "php-${php_version}.tar.bz2" "php-${php_version}" || return 1
     if [ "${Stack}" = "lnmp" ]; then
         ./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-config-file-scan-dir=/usr/local/php/conf.d --enable-fpm --with-fpm-user=www --with-fpm-group=www --enable-mysqlnd --with-mysqli=mysqlnd --with-pdo-mysql=mysqlnd --with-iconv=/usr/local --with-freetype=/usr/local/freetype --with-jpeg --with-zlib --enable-xml --disable-rpath --enable-bcmath --enable-shmop --enable-sysvsem ${with_curl} --enable-mbregex --enable-mbstring --enable-intl --enable-pcntl --enable-ftp --enable-gd ${with_openssl} --with-mhash --enable-pcntl --enable-sockets --with-zip --enable-soap --with-gettext ${with_fileinfo} --enable-opcache --with-xsl --with-pear --with-webp ${PHP_Buildin_Option} ${PHP_Modules_Options}
     else
@@ -1147,7 +1154,7 @@ Upgrade_PHP_84()
     sed -i 's/max_execution_time =.*/max_execution_time = 300/g' /usr/local/php/etc/php.ini
     sed -i 's/disable_functions =.*/disable_functions = passthru,exec,system,chroot,chgrp,chown,shell_exec,proc_open,proc_get_status,popen,ini_alter,ini_restore,dl,openlog,syslog,readlink,symlink,popepassthru,stream_socket_server/g' /usr/local/php/etc/php.ini
     Pear_Pecl_Set
-    Install_Composer
+    Install_Composer || return 1
 
 if [ "${Stack}" = "lnmp" ]; then
     echo "Creating new php-fpm configure file..."
@@ -1188,12 +1195,12 @@ fi
         sed -i '/^LoadModule php7_module/d' /usr/local/apache/conf/httpd.conf
     fi
     lnmp start
-    Check_PHP_Upgrade_Files
+    Check_PHP_Upgrade_Files || return 1
 }
 
 Upgrade_PHP()
 {
-    Start_Upgrade_PHP
+    Start_Upgrade_PHP || return 1
     if echo "${php_version}" | grep -Eqi '^5.2.';then
         Upgrade_PHP_52
     elif echo "${php_version}" | grep -Eqi '^5.3.';then

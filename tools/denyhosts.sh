@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
+umask 077
 export PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
+PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)" || exit 1
+cd -- "${PROJECT_DIR}" || exit 1
+cur_dir="${PROJECT_DIR}"
 
 # Check if user is root
 if [ $(id -u) != "0" ]; then
@@ -7,8 +13,8 @@ if [ $(id -u) != "0" ]; then
     exit 1
 fi
 
-. ../lnmp.conf
-. ../include/main.sh
+. "${PROJECT_DIR}/lnmp.conf"
+. "${PROJECT_DIR}/include/main.sh"
 Get_Dist_Name
 Get_Dist_Version
 
@@ -33,9 +39,9 @@ elif [ "${PM}" = "apt" ]; then
 fi
 
 echo "Downloading..."
-cd ../src
-Download_Files ${Download_Mirror}/security/denyhosts/denyhosts-3.1.tar.gz denyhosts-3.1.tar.gz
-Tar_Cd denyhosts-3.1.tar.gz denyhosts-3.1
+cd "${PROJECT_DIR}/src" || exit 1
+Download_Files "https://sourceforge.net/projects/denyhost/files/denyhost-3.1/denyhosts-3.1.tar.gz/download" denyhosts-3.1.tar.gz || exit 1
+Tar_Cd denyhosts-3.1.tar.gz denyhosts-3.1 || exit 1
 echo "Installing..."
 python setup.py install
 
@@ -81,8 +87,8 @@ sed -i '/^ADMIN_EMAIL/s/^/#/' /etc/denyhosts.conf
 sed -i 's#^DENY_THRESHOLD_ROOT =.*#DENY_THRESHOLD_ROOT = 3#g' /etc/denyhosts.conf
 
 sed -i '/STATE_LOCK_EXISTS\ \=\ \-2/aif not os.path.exists("/var/lock/subsys"): os.makedirs("/var/lock/subsys")' /etc/init.d/denyhosts
-cd ..
-rm -rf denyhosts-3.1
+cd "${PROJECT_DIR}" || exit 1
+rm -rf -- "${PROJECT_DIR}/src/denyhosts-3.1"
 
 StartUp denyhosts
 echo "Start DenyHosts..."

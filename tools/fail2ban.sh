@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
+umask 077
 export PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
+PROJECT_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)" || exit 1
+cd -- "${PROJECT_DIR}" || exit 1
+cur_dir="${PROJECT_DIR}"
 
 # Check if user is root
 if [ $(id -u) != "0" ]; then
@@ -7,8 +13,8 @@ if [ $(id -u) != "0" ]; then
     exit 1
 fi
 
-. ../lnmp.conf
-. ../include/main.sh
+. "${PROJECT_DIR}/lnmp.conf"
+. "${PROJECT_DIR}/include/main.sh"
 Get_Dist_Name
 Get_Dist_Version
 
@@ -35,9 +41,10 @@ elif [ "${PM}" = "apt" ]; then
 fi
 
 echo "Downloading..."
-cd ../src
-Download_Files ${Download_Mirror}/security/fail2ban/fail2ban-0.11.2.tar.gz fail2ban-0.11.2.tar.gz || exit 1
-Extract_Archive fail2ban-0.11.2.tar.gz && cd fail2ban-0.11.2
+cd "${PROJECT_DIR}/src" || exit 1
+Download_Files "https://github.com/fail2ban/fail2ban/archive/refs/tags/0.11.2.tar.gz" fail2ban-0.11.2.tar.gz || exit 1
+Extract_Archive fail2ban-0.11.2.tar.gz || exit 1
+cd fail2ban-0.11.2 || exit 1
 echo "Installing..."
 python setup.py install --prefix=/usr
 
@@ -71,8 +78,8 @@ elif [ "${PM}" = "apt" ]; then
 fi
 \cp build/fail2ban.service /etc/systemd/system/fail2ban.service
 chmod +x /etc/init.d/fail2ban
-cd ..
-rm -rf fail2ban-0.11.1
+cd "${PROJECT_DIR}" || exit 1
+rm -rf -- "${PROJECT_DIR}/src/fail2ban-0.11.2"
 
 StartUp fail2ban
 

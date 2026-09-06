@@ -2,7 +2,7 @@
 
 Install_PHP_Bz2()
 {
-    cd ${cur_dir}/src
+    cd "${cur_dir}/src" || return 1
     echo "====== Installing PHP Bz2 ======"
     Press_Start
 
@@ -17,12 +17,12 @@ Install_PHP_Bz2()
 
     Download_PHP_Src
 
-    Tar_Cd php-${Cur_PHP_Version}.tar.bz2 php-${Cur_PHP_Version}/ext/bz2
-    ${PHP_Path}/bin/phpize
-    ./configure --with-php-config=${PHP_Path}/bin/php-config
-    make && make install
-    cd -
-    rm -rf php-${Cur_PHP_Version}
+    Tar_Cd "php-${Cur_PHP_Version}.tar.bz2" "php-${Cur_PHP_Version}/ext/bz2" || return 1
+    "${PHP_Path}/bin/phpize" || return 1
+    ./configure --with-php-config="${PHP_Path}/bin/php-config" || return 1
+    make && make install || return 1
+    cd - >/dev/null || return 1
+    rm -rf -- "php-${Cur_PHP_Version}"
 
     cat >${PHP_Path}/conf.d/009-bz2.ini<<EOF
 extension = "bz2.so"

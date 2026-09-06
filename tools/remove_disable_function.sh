@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 export PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
+cd -- "${SCRIPT_DIR}" || exit 1
+
 # Check if user is root
 if [ $(id -u) != "0" ]; then
     echo "Error: You must be root to run this script, please use root to install lnmp"
@@ -18,7 +21,7 @@ echo "+-------------------------------------------------------------------+"
 echo "|             Usage: ./remove_disable_function.sh                   |"
 echo "+-------------------------------------------------------------------+"
 
-cur_dir=$(pwd)
+cur_dir="${SCRIPT_DIR}"
         
     ver=""
     echo "Remove all php disable function please type: 1"

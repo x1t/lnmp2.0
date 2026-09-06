@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
+umask 077
 export PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
+cd -- "${SCRIPT_DIR}" || exit 1
 
 # Check if user is root
 if [ $(id -u) != "0" ]; then
@@ -16,7 +20,7 @@ echo "|For more information please visit https://lnmp.org        |"
 echo "+----------------------------------------------------------+"
 echo "|Usage: ./pureftpd.sh                                      |"
 echo "+----------------------------------------------------------+"
-cur_dir=$(pwd)
+cur_dir="${SCRIPT_DIR}"
 action=$1
 
 . lnmp.conf
@@ -27,7 +31,7 @@ Get_Dist_Name
 
 Install_Pureftpd()
 {
-    Press_Install
+    Press_Install || return 1
 
     Echo_Blue "Installing dependent packages..."
     if [ "$PM" = "yum" ]; then
@@ -40,36 +44,32 @@ Install_Pureftpd()
         do apt-get --no-install-recommends install -y $packages; done
     fi
     Echo_Blue "Download files..."
-    cd ${cur_dir}/src
-    Download_Files ${Download_Mirror}/ftp/pure-ftpd/${Pureftpd_Ver}.tar.bz2 ${Pureftpd_Ver}.tar.bz2
-    if [ $? -eq 0 ]; then
-        echo "Download ${Pureftpd_Ver}.tar.bz2 successfully!"
-    else
-        Download_Files https://download.pureftpd.org/pub/pure-ftpd/releases/${Pureftpd_Ver}.tar.bz2 ${Pureftpd_Ver}.tar.bz2
-    fi
+    cd "${cur_dir}/src" || return 1
+    Download_Files "https://download.pureftpd.org/pure-ftpd/releases/obsolete/${Pureftpd_Ver}.tar.bz2" "${Pureftpd_Ver}.tar.bz2" || return 1
+    echo "Download ${Pureftpd_Ver}.tar.bz2 successfully!"
 
     Echo_Blue "Installing pure-ftpd..."
-    Tar_Cd ${Pureftpd_Ver}.tar.bz2 ${Pureftpd_Ver}
-    ./configure --prefix=/usr/local/pureftpd CFLAGS=-O2 --with-puredb --with-quotas --with-cookie --with-virtualhosts --with-diraliases --with-sysquotas --with-ratios --with-altlog --with-paranoidmsg --with-shadow --with-welcomemsg --with-throttling --with-uploadscript --with-language=english --with-rfc2640 --with-ftpwho --with-tls
+    Tar_Cd "${Pureftpd_Ver}.tar.bz2" "${Pureftpd_Ver}" || return 1
+    ./configure --prefix=/usr/local/pureftpd CFLAGS=-O2 --with-puredb --with-quotas --with-cookie --with-virtualhosts --with-diraliases --with-sysquotas --with-ratios --with-altlog --with-paranoidmsg --with-shadow --with-welcomemsg --with-throttling --with-uploadscript --with-language=english --with-rfc2640 --with-ftpwho --with-tls || return 1
 
-    Make_Install
+    Make_Install || return 1
 
     Echo_Blue "Copy configure files..."
-    mkdir /usr/local/pureftpd/etc
-    \cp ${cur_dir}/conf/pure-ftpd.conf /usr/local/pureftpd/etc/pure-ftpd.conf
+    mkdir -p /usr/local/pureftpd/etc || return 1
+    \cp "${cur_dir}/conf/pure-ftpd.conf" /usr/local/pureftpd/etc/pure-ftpd.conf || return 1
     if [ -L /etc/init.d/pureftpd ]; then
         rm -f /etc/init.d/pureftpd
     fi
-    \cp ${cur_dir}/init.d/init.d.pureftpd /etc/init.d/pureftpd
-    \cp ${cur_dir}/init.d/pureftpd.service /etc/systemd/system/pureftpd.service
+    \cp "${cur_dir}/init.d/init.d.pureftpd" /etc/init.d/pureftpd || return 1
+    \cp "${cur_dir}/init.d/pureftpd.service" /etc/systemd/system/pureftpd.service || return 1
     chmod +x /etc/init.d/pureftpd
     touch /usr/local/pureftpd/etc/pureftpd.passwd
     touch /usr/local/pureftpd/etc/pureftpd.pdb
 
     StartUp pureftpd
 
-    cd ..
-    rm -rf ${cur_dir}/src/${Pureftpd_Ver}
+    cd "${cur_dir}" || return 1
+    rm -rf -- "${cur_dir}/src/${Pureftpd_Ver}"
 
     if command -v iptables >/dev/null 2>&1; then
         if [ -s /bin/lnmp ]; then
@@ -99,10 +99,9 @@ Install_Pureftpd()
         \cp ${cur_dir}/conf/lnmp /bin/lnmp
         chmod +x /bin/lnmp
     fi
-    id -u www
-    if [ $? -ne 0 ]; then
-        groupadd www
-        useradd -s /sbin/nologin -g www www
+    if ! id -u www >/dev/null 2>&1; then
+        getent group www >/dev/null 2>&1 || groupadd www || return 1
+        useradd -s /sbin/nologin -g www www || return 1
     fi
 
     if [[ -s /usr/local/pureftpd/sbin/pure-ftpd && -s /usr/local/pureftpd/etc/pure-ftpd.conf && -s /etc/init.d/pureftpd ]]; then

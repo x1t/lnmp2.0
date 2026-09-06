@@ -69,45 +69,53 @@ MySQL_Sec_Setting()
 
     if Is_Modern_MySQL_DB || Is_Modern_MySQL_Version; then
         local -a mysql_root_cmd
+        local sql_password temporary_password_cnf=""
+        sql_password=$(Escape_SQL_String "${DB_Root_Password}")
         if [ -n "${MySQL_Temporary_Password:-}" ]; then
-            mysql_root_cmd=(env "MYSQL_PWD=${MySQL_Temporary_Password}" /usr/local/mysql/bin/mysql --connect-expired-password --protocol=socket -u root)
+            temporary_password_cnf=$(Make_Temporary_DB_Option_File "${MySQL_Temporary_Password}") || return 1
+            mysql_root_cmd=(/usr/local/mysql/bin/mysql "--defaults-file=${temporary_password_cnf}" --connect-expired-password --protocol=socket -u root)
         else
             mysql_root_cmd=(/usr/local/mysql/bin/mysql --protocol=socket -u root)
         fi
-        "${mysql_root_cmd[@]}" -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_Root_Password}';" || {
+        if ! Run_DB_Query "ALTER USER 'root'@'localhost' IDENTIFIED BY '${sql_password}';" "${mysql_root_cmd[@]}"; then
             echo "failed, try other way..."
-            /etc/init.d/mysql restart || return 1
-            "${mysql_root_cmd[@]}" -e "SET PASSWORD FOR 'root'@'localhost' = '${DB_Root_Password}';" || return 1
-        }
-    elif ! /usr/local/mysql/bin/mysqladmin -u root password "${DB_Root_Password}"; then
+            if ! /etc/init.d/mysql restart; then
+                [ -n "${temporary_password_cnf}" ] && rm -f -- "${temporary_password_cnf}"
+                return 1
+            fi
+            if ! Run_DB_Query "SET PASSWORD FOR 'root'@'localhost' = '${sql_password}';" "${mysql_root_cmd[@]}"; then
+                [ -n "${temporary_password_cnf}" ] && rm -f -- "${temporary_password_cnf}"
+                return 1
+            fi
+        fi
+        [ -n "${temporary_password_cnf}" ] && rm -f -- "${temporary_password_cnf}"
+    elif ! printf '%s\n%s\n' "${DB_Root_Password}" "${DB_Root_Password}" | /usr/local/mysql/bin/mysqladmin -u root password; then
         echo "failed, try other way..."
         /etc/init.d/mysql restart || return 1
-        cat >~/.emptymy.cnf<<EOF
-[client]
-user=root
-password=''
-EOF
+        local empty_mysql_cnf
+        empty_mysql_cnf=$(Make_Empty_TempMycnf) || return 1
+        sql_password=$(Escape_SQL_String "${DB_Root_Password}")
         if [ "${DBSelect}" = "4" ] || echo "${mysql_version}" | grep -Eqi '^5.7.'; then
-            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('${DB_Root_Password}');" || {
-                rm -f ~/.emptymy.cnf
+            Run_DB_Query "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('${sql_password}');" /usr/local/mysql/bin/mysql "--defaults-file=${empty_mysql_cnf}" || {
+                rm -f -- "${empty_mysql_cnf}"
                 return 1
             }
         elif Is_Modern_MySQL_DB || Is_Modern_MySQL_Version; then
-            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "SET PASSWORD FOR 'root'@'localhost' = '${DB_Root_Password}';" || {
-                rm -f ~/.emptymy.cnf
+            Run_DB_Query "SET PASSWORD FOR 'root'@'localhost' = '${sql_password}';" /usr/local/mysql/bin/mysql "--defaults-file=${empty_mysql_cnf}" || {
+                rm -f -- "${empty_mysql_cnf}"
                 return 1
             }
         else
-            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "UPDATE mysql.user SET Password=PASSWORD('${DB_Root_Password}') WHERE User='root';" || {
-                rm -f ~/.emptymy.cnf
+            Run_DB_Query "UPDATE mysql.user SET Password=PASSWORD('${sql_password}') WHERE User='root';" /usr/local/mysql/bin/mysql "--defaults-file=${empty_mysql_cnf}" || {
+                rm -f -- "${empty_mysql_cnf}"
                 return 1
             }
-            /usr/local/mysql/bin/mysql --defaults-file=~/.emptymy.cnf -e "FLUSH PRIVILEGES;" || {
-                rm -f ~/.emptymy.cnf
+            Run_DB_Query "FLUSH PRIVILEGES;" /usr/local/mysql/bin/mysql "--defaults-file=${empty_mysql_cnf}" || {
+                rm -f -- "${empty_mysql_cnf}"
                 return 1
             }
         fi
-        rm -f ~/.emptymy.cnf
+        rm -f -- "${empty_mysql_cnf}"
     fi
     /etc/init.d/mysql restart || return 1
 
@@ -116,11 +124,11 @@ EOF
     echo "OK, MySQL root password correct."
     echo "Update root password..."
     if [ "${DBSelect}" = "4" ] || echo "${mysql_version}" | grep -Eqi '^5.7.'; then
-        Do_Query "UPDATE mysql.user SET authentication_string=PASSWORD('${DB_Root_Password}') WHERE User='root';" || return 1
+        Do_Query "UPDATE mysql.user SET authentication_string=PASSWORD('$(Escape_SQL_String "${DB_Root_Password}")') WHERE User='root';" || return 1
     elif Is_Modern_MySQL_DB || Is_Modern_MySQL_Version; then
-        Do_Query "SET PASSWORD FOR 'root'@'localhost' = '${DB_Root_Password}';" || return 1
+        Do_Query "SET PASSWORD FOR 'root'@'localhost' = '$(Escape_SQL_String "${DB_Root_Password}")';" || return 1
     else
-        Do_Query "UPDATE mysql.user SET Password=PASSWORD('${DB_Root_Password}') WHERE User='root';" || return 1
+        Do_Query "UPDATE mysql.user SET Password=PASSWORD('$(Escape_SQL_String "${DB_Root_Password}")') WHERE User='root';" || return 1
     fi
     echo " ... Success."
     echo "Remove anonymous users..."
@@ -244,7 +252,7 @@ Install_MySQL_51()
 {
     Echo_Blue "[+] Installing ${Mysql_Ver}..."
     rm -f /etc/my.cnf
-    Tar_Cd ${Mysql_Ver}.tar.gz ${Mysql_Ver}
+    Tar_Cd "${Mysql_Ver}.tar.gz" "${Mysql_Ver}" || return 1
     MySQL_Gcc7_Patch
     if [ "${InstallInnodb}" = "y" ]; then
         ./configure --prefix=/usr/local/mysql --with-extra-charsets=complex --enable-thread-safe-client --enable-assembler --with-mysqld-ldflags=-all-static --with-charset=utf8 --enable-thread-safe-client --with-big-tables --with-readline --with-ssl --with-embedded-server --enable-local-infile --with-plugins=innobase ${MySQL51MAOpt}
@@ -252,10 +260,10 @@ Install_MySQL_51()
         ./configure --prefix=/usr/local/mysql --with-extra-charsets=complex --enable-thread-safe-client --enable-assembler --with-mysqld-ldflags=-all-static --with-charset=utf8 --enable-thread-safe-client --with-big-tables --with-readline --with-ssl --with-embedded-server --enable-local-infile ${MySQL51MAOpt}
     fi
     sed -i '/set -ex;/,/done/d' Makefile
-    Make_Install
+    Make_Install || return 1
 
-    groupadd mysql
-    useradd -s /sbin/nologin -M -g mysql mysql
+    getent group mysql >/dev/null 2>&1 || groupadd mysql || return 1
+    id mysql >/dev/null 2>&1 || useradd -s /sbin/nologin -M -g mysql mysql || return 1
 
     cat > /etc/my.cnf<<EOF
 [client]
@@ -348,7 +356,7 @@ Install_MySQL_55()
 {
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "[+] Installing ${Mysql_Ver} Using Generic Binaries..."
-        Tar_Cd ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz
+        Tar_Cd "${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz" || return 1
         mkdir /usr/local/mysql
         mv ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}/* /usr/local/mysql/
     else
@@ -358,7 +366,7 @@ Install_MySQL_55()
         else
             MySQL_WITH_SSL=''
         fi
-        Tar_Cd ${Mysql_Ver}.tar.gz ${Mysql_Ver}
+        Tar_Cd "${Mysql_Ver}.tar.gz" "${Mysql_Ver}" || return 1
         MySQL_ARM_Patch
         if  g++ -dM -E -x c++ /dev/null | grep -F __cplusplus | cut -d' ' -f3 | grep -Eqi "^2017|202[0-9]"; then
             sed -i '1s/^/set(CMAKE_CXX_STANDARD 11)\n/' CMakeLists.txt
@@ -367,11 +375,11 @@ Install_MySQL_55()
             sed -i 's@^INCLUDE(cmake/abi_check.cmake)@#INCLUDE(cmake/abi_check.cmake)@' CMakeLists.txt
         fi
         cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_READLINE=1 -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_SSL}
-        Make_Install
+        Make_Install || return 1
     fi
 
-    groupadd mysql
-    useradd -s /sbin/nologin -M -g mysql mysql
+    getent group mysql >/dev/null 2>&1 || groupadd mysql || return 1
+    id mysql >/dev/null 2>&1 || useradd -s /sbin/nologin -M -g mysql mysql || return 1
 
     cat > /etc/my.cnf<<EOF
 [client]
@@ -466,7 +474,7 @@ Install_MySQL_56()
 {
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "[+] Installing ${Mysql_Ver} Using Generic Binaries..."
-        Tar_Cd ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz
+        Tar_Cd "${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz" || return 1
         mkdir /usr/local/mysql
         mv ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}/* /usr/local/mysql/
     else
@@ -477,7 +485,7 @@ Install_MySQL_56()
         else
             MySQL_WITH_SSL=''
         fi
-        Tar_Cd ${Mysql_Ver}.tar.gz ${Mysql_Ver}
+        Tar_Cd "${Mysql_Ver}.tar.gz" "${Mysql_Ver}" || return 1
         if  g++ -dM -E -x c++ /dev/null | grep -F __cplusplus | cut -d' ' -f3 | grep -Eqi "^2017|202[0-9]"; then
             sed -i '1s/^/set(CMAKE_CXX_STANDARD 11)\n/' CMakeLists.txt
         fi
@@ -485,11 +493,11 @@ Install_MySQL_56()
             sed -i 's@^INCLUDE(cmake/abi_check.cmake)@#INCLUDE(cmake/abi_check.cmake)@' CMakeLists.txt
         fi
         cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_SSL}
-        Make_Install
+        Make_Install || return 1
     fi
 
-    groupadd mysql
-    useradd -s /sbin/nologin -M -g mysql mysql
+    getent group mysql >/dev/null 2>&1 || groupadd mysql || return 1
+    id mysql >/dev/null 2>&1 || useradd -s /sbin/nologin -M -g mysql mysql || return 1
 
     cat > /etc/my.cnf<<EOF
 [client]
@@ -616,7 +624,7 @@ Install_MySQL_57()
     rm -f /etc/my.cnf
     if [ "${Bin}" = "y" ]; then
         Echo_Blue "[+] Installing ${Mysql_Ver} Using Generic Binaries..."
-        Tar_Cd ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz
+        Tar_Cd "${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz" || return 1
         mkdir /usr/local/mysql
         mv ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}/* /usr/local/mysql/
     else
@@ -627,17 +635,17 @@ Install_MySQL_57()
         else
             MySQL_WITH_SSL=''
         fi
-        Tar_Cd ${Mysql_Ver}.tar.gz ${Mysql_Ver}
-        Install_Boost
+        Tar_Cd "${Mysql_Ver}.tar.gz" "${Mysql_Ver}" || return 1
+        Install_Boost || return 1
         if echo "${Rocky_Version}" | grep -Eqi "^9"; then
             sed -i 's@^INCLUDE(cmake/abi_check.cmake)@#INCLUDE(cmake/abi_check.cmake)@' CMakeLists.txt
         fi
         cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DWITH_EMBEDDED_SERVER=1 -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_SSL} ${MySQL_WITH_BOOST}
-        Make_Install
+        Make_Install || return 1
     fi
 
-    groupadd mysql
-    useradd -s /sbin/nologin -M -g mysql mysql
+    getent group mysql >/dev/null 2>&1 || groupadd mysql || return 1
+    id mysql >/dev/null 2>&1 || useradd -s /sbin/nologin -M -g mysql mysql || return 1
 
     cat > /etc/my.cnf<<EOF
 [client]
@@ -739,8 +747,8 @@ Install_MySQL_80()
         rmdir "${mysql8_dir}" || return 1
     else
         Echo_Blue "[+] Installing ${Mysql_Ver} Using Source code..."
-        Tar_Cd ${Mysql_Ver}.tar.gz ${Mysql_Ver}
-        Install_Boost
+        Tar_Cd "${Mysql_Ver}.tar.gz" "${Mysql_Ver}" || return 1
+        Install_Boost || return 1
         mkdir build && cd build || return 1
         cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DWITH_MYISAM_STORAGE_ENGINE=1 -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_PARTITION_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DEXTRA_CHARSETS=all -DDEFAULT_CHARSET=utf8mb4 -DDEFAULT_COLLATION=utf8mb4_general_ci -DENABLED_LOCAL_INFILE=1 ${MySQL_WITH_BOOST} || return 1
         Make_Install || return 1
@@ -819,14 +827,14 @@ EOF
     Check_MySQL_Dependencies || return 1
     local mysql_init_output
     MySQL_Temporary_Password=''
-    mysql_init_output=$(mktemp /tmp/mysql-init.XXXXXX) || return 1
+    mysql_init_output=$(mktemp "${TMPDIR:-/tmp}/lnmp-mysql-init.XXXXXX") || return 1
     if ! /usr/local/mysql/bin/mysqld --initialize --console --basedir=/usr/local/mysql --datadir="${MySQL_Data_Dir}" --user=mysql >"${mysql_init_output}" 2>&1; then
-        cat "${mysql_init_output}" >&2
-        rm -f "${mysql_init_output}"
+        echo "MySQL initialization failed; refusing to print its captured output because it may contain credentials." >&2
+        rm -f -- "${mysql_init_output}"
         return 1
     fi
     MySQL_Temporary_Password=$(sed -n 's/.*[Tt]emporary password is generated for root@localhost: //p' "${mysql_init_output}" | tail -n 1)
-    rm -f "${mysql_init_output}"
+    rm -f -- "${mysql_init_output}"
     if [ -z "${MySQL_Temporary_Password}" ]; then
         echo "MySQL initialization did not provide a temporary root password." >&2
         return 1

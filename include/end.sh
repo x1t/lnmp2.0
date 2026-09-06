@@ -261,7 +261,7 @@ Print_Sucess_Info()
     echo "|  Default directory: ${Default_Website_Dir}                              |"
     if [ "${DBSelect}" != "0" ]; then
         echo "+------------------------------------------------------------------------+"
-        echo "|  MySQL/MariaDB root password: ${DB_Root_Password}                          |"
+        echo "|  MySQL/MariaDB root password has been configured.                       |"
     fi
     echo "+------------------------------------------------------------------------+"
     lnmp status

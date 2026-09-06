@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
+umask 077
 export PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
+cd -- "${SCRIPT_DIR}" || exit 1
 
 # Check if user is root
 if [ $(id -u) != "0" ]; then
@@ -7,7 +11,7 @@ if [ $(id -u) != "0" ]; then
     exit 1
 fi
 
-cur_dir=$(pwd)
+cur_dir="${SCRIPT_DIR}"
 action=$1
 action2=$2
 

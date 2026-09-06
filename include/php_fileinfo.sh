@@ -2,7 +2,7 @@
 
 Install_PHP_Fileinfo()
 {
-    cd ${cur_dir}/src
+    cd "${cur_dir}/src" || return 1
     echo "====== Installing PHP Fileinfo ======"
     Echo_Yellow "If the memory is less than 1GB, fileinfo may fail to install."
     Press_Start
@@ -18,12 +18,12 @@ Install_PHP_Fileinfo()
 
     Download_PHP_Src
 
-    Tar_Cd php-${Cur_PHP_Version}.tar.bz2 php-${Cur_PHP_Version}/ext/fileinfo
-    ${PHP_Path}/bin/phpize
-    ./configure --with-php-config=${PHP_Path}/bin/php-config
-    make && make install
-    cd -
-    rm -rf php-${Cur_PHP_Version}
+    Tar_Cd "php-${Cur_PHP_Version}.tar.bz2" "php-${Cur_PHP_Version}/ext/fileinfo" || return 1
+    "${PHP_Path}/bin/phpize" || return 1
+    ./configure --with-php-config="${PHP_Path}/bin/php-config" || return 1
+    make && make install || return 1
+    cd - >/dev/null || return 1
+    rm -rf -- "php-${Cur_PHP_Version}"
 
     cat >${PHP_Path}/conf.d/009-fileinfo.ini<<EOF
 extension = "fileinfo.so"

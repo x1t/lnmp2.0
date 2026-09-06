@@ -19,12 +19,12 @@ Install_Nginx_Openssl()
         if [[ "${Nginx_Ver_Com}" == "0" ||  "${Nginx_Ver_Com}" == "1" ]]; then
             # Use official OpenSSL source
             Download_Files "https://www.openssl.org/source/old/1.0.2/${Openssl_Ver}.tar.gz" "${Openssl_Ver}.tar.gz" || return 1
-            [[ -d "${Openssl_Ver}" ]] && rm -rf ${Openssl_Ver}
+            [[ -d "${Openssl_Ver}" ]] && rm -rf -- "${Openssl_Ver}"
             Extract_Archive "${Openssl_Ver}.tar.gz" || return 1
             Nginx_With_Openssl="--with-openssl=${cur_dir}/src/${Openssl_Ver}"
         else
             Download_Files "https://www.openssl.org/source/old/1.1.1/${Openssl_New_Ver}.tar.gz" "${Openssl_New_Ver}.tar.gz" || return 1
-            [[ -d "${Openssl_New_Ver}" ]] && rm -rf ${Openssl_New_Ver}
+            [[ -d "${Openssl_New_Ver}" ]] && rm -rf -- "${Openssl_New_Ver}"
             Extract_Archive "${Openssl_New_Ver}.tar.gz" || return 1
             Nginx_With_Openssl="--with-openssl=${cur_dir}/src/${Openssl_New_Ver}"
         fi
@@ -35,21 +35,21 @@ Install_Nginx_Lua()
 {
     if [ "${Enable_Nginx_Lua}" = 'y' ]; then
         echo "Installing Lua for Nginx..."
-        cd ${cur_dir}/src
-        Download_Files ${Download_Mirror}/lib/lua/${Luajit_Ver}.tar.gz ${Luajit_Ver}.tar.gz
-        Download_Files ${Download_Mirror}/lib/lua/${LuaNginxModule}.tar.gz ${LuaNginxModule}.tar.gz
-        Download_Files ${Download_Mirror}/lib/lua/${NgxDevelKit}.tar.gz ${NgxDevelKit}.tar.gz
-        Download_Files ${Download_Mirror}/lib/lua/${LuaRestyCore}.tar.gz ${LuaRestyCore}.tar.gz
-        Download_Files ${Download_Mirror}/lib/lua/${LuaRestyLrucache}.tar.gz ${LuaRestyLrucache}.tar.gz
+        cd "${cur_dir}/src" || return 1
+        Download_Files "https://github.com/openresty/luajit2/archive/refs/tags/v${Luajit_Ver#luajit2-}.tar.gz" "${Luajit_Ver}.tar.gz" || return 1
+        Download_Files "https://github.com/openresty/lua-nginx-module/archive/refs/tags/v${LuaNginxModule#lua-nginx-module-}.tar.gz" "${LuaNginxModule}.tar.gz" || return 1
+        Download_Files "https://github.com/simpl/ngx_devel_kit/archive/refs/tags/v${NgxDevelKit#ngx_devel_kit-}.tar.gz" "${NgxDevelKit}.tar.gz" || return 1
+        Download_Files "https://github.com/openresty/lua-resty-core/archive/refs/tags/v${LuaRestyCore#lua-resty-core-}.tar.gz" "${LuaRestyCore}.tar.gz" || return 1
+        Download_Files "https://github.com/openresty/lua-resty-lrucache/archive/refs/tags/v${LuaRestyLrucache#lua-resty-lrucache-}.tar.gz" "${LuaRestyLrucache}.tar.gz" || return 1
 
         Echo_Blue "[+] Installing ${Luajit_Ver}... "
         Extract_Archive "${LuaNginxModule}.tar.gz" || return 1
         Extract_Archive "${NgxDevelKit}.tar.gz" || return 1
-        Tar_Cd ${Luajit_Ver}.tar.gz ${Luajit_Ver}
-        make
-        make install PREFIX=/usr/local/luajit
-        cd ${cur_dir}/src
-        rm -rf ${cur_dir}/src/${Luajit_Ver}
+        Tar_Cd "${Luajit_Ver}.tar.gz" "${Luajit_Ver}" || return 1
+        make || return 1
+        make install PREFIX=/usr/local/luajit || return 1
+        cd "${cur_dir}/src" || return 1
+        rm -rf -- "${cur_dir}/src/${Luajit_Ver}"
 
         cat > /etc/ld.so.conf.d/luajit.conf<<EOF
 /usr/local/luajit/lib
@@ -66,14 +66,14 @@ export LUAJIT_LIB=/usr/local/luajit/lib
 export LUAJIT_INC=/usr/local/luajit/include/luajit-2.1
 EOF
 
-        source /etc/profile.d/luajit.sh
+        source /etc/profile.d/luajit.sh || return 1
 
-        Tar_Cd ${LuaRestyCore}.tar.gz ${LuaRestyCore}
-        make install PREFIX=/usr/local/nginx
-        cd -
-        Tar_Cd ${LuaRestyLrucache}.tar.gz ${LuaRestyLrucache}
-        make install PREFIX=/usr/local/nginx
-        cd -
+        Tar_Cd "${LuaRestyCore}.tar.gz" "${LuaRestyCore}" || return 1
+        make install PREFIX=/usr/local/nginx || return 1
+        cd "${cur_dir}/src" || return 1
+        Tar_Cd "${LuaRestyLrucache}.tar.gz" "${LuaRestyLrucache}" || return 1
+        make install PREFIX=/usr/local/nginx || return 1
+        cd "${cur_dir}/src" || return 1
 
         Nginx_Ver_Com=$(${cur_dir}/include/version_compare 1.21.5 ${Nginx_Version})
         if [[  "${Nginx_Ver_Com}" == "1" ]]; then
@@ -81,9 +81,9 @@ EOF
         else
             if [ "${Nginx_With_Pcre}" = "" ]; then
                 Nginx_Module_Lua="--with-ld-opt=-Wl,-rpath,/usr/local/luajit/lib --add-module=${cur_dir}/src/${LuaNginxModule} --add-module=${cur_dir}/src/${NgxDevelKit} --with-pcre=${cur_dir}/src/${Pcre_Ver} --with-pcre-jit"
-                cd ${cur_dir}/src
-                Download_Files ${Download_Mirror}/web/pcre/${Pcre_Ver}.tar.bz2 ${Pcre_Ver}.tar.bz2
-                Tar_Cd ${Pcre_Ver}.tar.bz2
+                cd "${cur_dir}/src" || return 1
+                Download_Files "${University_Mirror}/macports/distfiles/pcre/${Pcre_Ver}.tar.bz2" "${Pcre_Ver}.tar.bz2" || return 1
+                Tar_Cd "${Pcre_Ver}.tar.bz2" || return 1
             else
                 Nginx_Module_Lua="--with-ld-opt=-Wl,-rpath,/usr/local/luajit/lib --add-module=${cur_dir}/src/${LuaNginxModule} --add-module=${cur_dir}/src/${NgxDevelKit}"
             fi
@@ -95,10 +95,10 @@ Install_Ngx_FancyIndex()
 {
     if [ "${Enable_Ngx_FancyIndex}" = 'y' ]; then
         echo "Installing Ngx FancyIndex for Nginx..."
-        cd ${cur_dir}/src
-        Download_Files ${Download_Mirror}/web/nginx/${NgxFancyIndex_Ver}.tar.xz ${NgxFancyIndex_Ver}.tar.xz
+        cd "${cur_dir}/src" || return 1
+        Download_Files "https://github.com/aperezdc/ngx-fancyindex/releases/download/v${NgxFancyIndex_Ver#ngx-fancyindex-}/${NgxFancyIndex_Ver}.tar.xz" "${NgxFancyIndex_Ver}.tar.xz" || return 1
 
-        Tar_Cd ${NgxFancyIndex_Ver}.tar.xz
+        Tar_Cd "${NgxFancyIndex_Ver}.tar.xz" || return 1
         Ngx_FancyIndex="--add-module=${cur_dir}/src/${NgxFancyIndex_Ver}"
     fi
 }

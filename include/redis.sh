@@ -13,7 +13,7 @@ Install_Redis()
         rm -f "${zend_ext}"
     fi
 
-    cd ${cur_dir}/src
+    cd "${cur_dir}/src" || return 1
     if [ -s /usr/local/redis/bin/redis-server ]; then
         echo "Redis server already exists."
     else
@@ -21,16 +21,16 @@ Install_Redis()
             Redis_Stable_Ver='redis-5.0.9'
         fi
         Download_Files https://download.redis.io/releases/${Redis_Stable_Ver}.tar.gz ${Redis_Stable_Ver}.tar.gz || return 1
-        Tar_Cd ${Redis_Stable_Ver}.tar.gz ${Redis_Stable_Ver}
+        Tar_Cd "${Redis_Stable_Ver}.tar.gz" "${Redis_Stable_Ver}" || return 1
 
         Get_OS_Bit
         if [ "${Is_ARM}" = "y" ]; then
             sed -i 's/FINAL_LIBS=-lm/FINAL_LIBS=-lm -latomic/' src/Makefile
         fi
         if [[ "${Is_64bit}" = "y" || "${Is_ARM}" = "y" ]]; then
-            make PREFIX=/usr/local/redis install
+            make PREFIX=/usr/local/redis install || return 1
         else
-            make CFLAGS="-march=i686" PREFIX=/usr/local/redis install
+            make CFLAGS="-march=i686" PREFIX=/usr/local/redis install || return 1
         fi
         mkdir -p /usr/local/redis/etc/
         \cp redis.conf  /usr/local/redis/etc/
@@ -39,12 +39,12 @@ Install_Redis()
             sed -i 's/^# bind 127.0.0.1/bind 127.0.0.1/g' /usr/local/redis/etc/redis.conf
         fi
         sed -i 's#^pidfile /var/run/redis_6379.pid#pidfile /var/run/redis.pid#g' /usr/local/redis/etc/redis.conf
-        cd ../
-        rm -rf ${cur_dir}/src/${Redis_Stable_Ver}
+        cd "${cur_dir}/src" || return 1
+        rm -rf -- "${cur_dir}/src/${Redis_Stable_Ver}"
 
         if command -v iptables >/dev/null 2>&1; then
-            if iptables -C INPUT -i lo -j ACCEPT; then
-                iptables -A INPUT -p tcp --dport 6379 -j DROP
+            if ! iptables -C INPUT -p tcp --dport 6379 -j DROP >/dev/null 2>&1; then
+                iptables -A INPUT -p tcp --dport 6379 -j DROP || return 1
                 if [ "$PM" = "yum" ]; then
                     service iptables save
                     service iptables reload
@@ -67,18 +67,18 @@ Install_Redis()
 
     if echo "${Cur_PHP_Version}" | grep -Eqi '^5.2.';then
         Download_Files https://pecl.php.net/get/redis-2.2.7.tgz redis-2.2.7.tgz || return 1
-        Tar_Cd redis-2.2.7.tgz redis-2.2.7
+        Tar_Cd redis-2.2.7.tgz redis-2.2.7 || return 1
     elif echo "${Cur_PHP_Version}" | grep -Eqi '^5.[3456].';then
         Download_Files https://pecl.php.net/get/redis-4.3.0.tgz redis-4.3.0.tgz || return 1
-        Tar_Cd redis-4.3.0.tgz redis-4.3.0
+        Tar_Cd redis-4.3.0.tgz redis-4.3.0 || return 1
     else
         Download_Files https://pecl.php.net/get/${PHPRedis_Ver}.tgz ${PHPRedis_Ver}.tgz || return 1
-        Tar_Cd ${PHPRedis_Ver}.tgz ${PHPRedis_Ver}
+        Tar_Cd "${PHPRedis_Ver}.tgz" "${PHPRedis_Ver}" || return 1
     fi
-    ${PHP_Path}/bin/phpize
-    ./configure --with-php-config=${PHP_Path}/bin/php-config
-    Make_Install
-    cd ../
+    "${PHP_Path}/bin/phpize" || return 1
+    ./configure --with-php-config="${PHP_Path}/bin/php-config" || return 1
+    Make_Install || return 1
+    cd "${cur_dir}/src" || return 1
 
     cat >${PHP_Path}/conf.d/007-redis.ini<<EOF
 extension = "redis.so"
@@ -115,7 +115,9 @@ Uninstall_Redis()
     rm -rf /usr/local/redis
     rm -rf /etc/init.d/redis
     if command -v iptables >/dev/null 2>&1; then
-        iptables -D INPUT -p tcp --dport 6379 -j DROP
+        if iptables -C INPUT -p tcp --dport 6379 -j DROP >/dev/null 2>&1; then
+            iptables -D INPUT -p tcp --dport 6379 -j DROP || return 1
+        fi
         if [ "$PM" = "yum" ]; then
             service iptables save
             service iptables reload

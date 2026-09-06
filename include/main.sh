@@ -448,17 +448,30 @@ Database_Selection()
 
     if [[ "${DBSelect}" != "0" ]]; then
         #set mysql root password
-        if [ -z ${DB_Root_Password} ]; then
+        if [ -z "${DB_Root_Password:-}" ]; then
             echo "==========================="
-            DB_Root_Password="root"
             Echo_Yellow "Please setup root password of MySQL."
-            read -p "Please enter: " DB_Root_Password
-            if [ "${DB_Root_Password}" = "" ]; then
-                echo "NO input,password will be generated randomly."
-                DB_Root_Password="lnmp.org#$RANDOM"
+            read -r -s -p "Please enter (input will not be shown): " DB_Root_Password
+            printf '\n'
+            if [ -z "${DB_Root_Password}" ]; then
+                if command -v openssl >/dev/null 2>&1; then
+                    DB_Root_Password=$(openssl rand -hex 24) || return 1
+                else
+                    DB_Root_Password=$(od -An -N24 -tx1 /dev/urandom | tr -d '[:space:]') || return 1
+                fi
+                if [ "${#DB_Root_Password}" -ne 48 ]; then
+                    Echo_Red "Unable to generate a secure MySQL root password."
+                    return 1
+                fi
+                if [ -w /dev/tty ]; then
+                    printf 'Generated MySQL root password (not written to the install log): %s\n' "${DB_Root_Password}" >/dev/tty
+                else
+                    Echo_Red "No terminal is available to display the generated MySQL root password."
+                    return 1
+                fi
             fi
         fi
-        echo "MySQL root password: ${DB_Root_Password}"
+        echo "MySQL root password has been configured."
 
         #do you want to enable or disable the InnoDB Storage Engine?
         echo "==========================="
@@ -648,19 +661,22 @@ Apache_Selection()
 
 Kill_PM()
 {
-    if ps aux | grep -E "yum|dnf" | grep -qv "grep"; then
-        kill -9 $(ps -ef|grep -E "yum|dnf"|grep -v grep|awk '{print $2}')
-        if [ -s /var/run/yum.pid ]; then
-            rm -f /var/run/yum.pid
+    local package_manager pids current_pids
+
+    pids=""
+    for package_manager in yum dnf dnf5 apt apt-get dpkg packagekitd unattended-upgrade; do
+        current_pids=$(ps -eo pid=,comm= | awk -v command="${package_manager}" '$2 == command { print $1 }')
+        if [ -n "${current_pids}" ]; then
+            pids="${pids} ${package_manager}:${current_pids}"
         fi
-    elif ps aux | grep -E "apt-get|dpkg|apt" | grep -qv "grep"; then
-        kill -9 $(ps -ef|grep -E "apt-get|apt|dpkg"|grep -v grep|awk '{print $2}')
-        if [[ -s /var/lib/dpkg/lock-frontend || -s /var/lib/dpkg/lock ]]; then
-            rm -f /var/lib/dpkg/lock-frontend
-            rm -f /var/lib/dpkg/lock
-            dpkg --configure -a
-        fi
+    done
+
+    if [ -n "${pids//[[:space:]]/}" ]; then
+        Echo_Red "A system package manager is already running:${pids}"
+        Echo_Yellow "Stop the active package manager normally, then run LNMP again."
+        return 1
     fi
+    return 0
 }
 
 Press_Install()
@@ -674,7 +690,7 @@ Press_Install()
         stty ${OLDCONFIG}
     fi
     . include/version.sh
-    Kill_PM
+    Kill_PM || return 1
 }
 
 Press_Start()
@@ -921,12 +937,93 @@ Get_Source_Checksum()
     ' "${Checksum_File}"
 }
 
+Check_Core_Source_Manifest()
+{
+    local -a required_sources=()
+    local source_name missing=0
+    local mysql_binary_file
+
+    required_sources+=("${Libiconv_Ver}.tar.gz" "${Pcre_Ver}.tar.bz2" "${Php_Ver}.tar.bz2" "${Freetype_Ver}.tar.bz2" "${Freetype_New_Ver}.tar.xz")
+    required_sources+=("${Curl_Ver}.tar.bz2" "${Libicu4c_Ver}-src.tgz" "icu4c-60_3-src.tgz" "${Libzip_Ver}.tar.xz" "${Nghttp2_Ver}.tar.xz" "${Openssl_Ver}.tar.gz" "${Openssl_New_Ver}.tar.gz")
+    PhpMyAdmin_Version="${PhpMyAdmin_Ver#phpMyAdmin-}"
+    PhpMyAdmin_Version="${PhpMyAdmin_Version%%-*}"
+    required_sources+=("${PhpMyAdmin_Ver}.tar.xz")
+
+    if [[ "${PHPSelect}" =~ ^[1-5]$ ]]; then
+        required_sources+=("${LibMcrypt_Ver}.tar.bz2" "${Mcypt_Ver}.tar.gz" "${Mhash_Ver}.tar.bz2")
+    fi
+
+    if [ "${SelectMalloc}" = "2" ]; then
+        required_sources+=("${Jemalloc_Ver}.tar.bz2")
+    elif [ "${SelectMalloc}" = "3" ]; then
+        required_sources+=("${TCMalloc_Ver}.tar.gz" "${Libunwind_Ver}.tar.gz")
+    fi
+
+    if [ "${DBSelect}" = "4" ]; then
+        required_sources+=("${Boost_Ver}.tar.bz2")
+    elif Is_Modern_MySQL_DB; then
+        required_sources+=("boost_1_77_0.tar.bz2" "boost_1_87_0.tar.bz2")
+    fi
+
+    if [ "${Enable_Nginx_Lua}" = "y" ]; then
+        required_sources+=("${Luajit_Ver}.tar.gz" "${LuaNginxModule}.tar.gz" "${NgxDevelKit}.tar.gz" "${LuaRestyCore}.tar.gz" "${LuaRestyLrucache}.tar.gz")
+    fi
+    if [ "${Enable_Ngx_FancyIndex}" = "y" ]; then
+        required_sources+=("${NgxFancyIndex_Ver}.tar.xz")
+    fi
+
+    if [ "${Stack}" != "lamp" ]; then
+        required_sources+=("${Nginx_Ver}.tar.gz")
+    fi
+
+    if Is_MySQL_DB; then
+        if [ "${Bin}" = "y" ]; then
+            if [[ "${DBSelect}" =~ ^[2-4]$ ]]; then
+                required_sources+=("${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz")
+            else
+                mysql_binary_file=$(Get_MySQL_Binary_File "${Mysql_Ver}" "${DB_ARCH}") || return 1
+                required_sources+=("${mysql_binary_file}")
+            fi
+        else
+            required_sources+=("${Mysql_Ver}.tar.gz")
+        fi
+    elif Is_MariaDB_DB; then
+        Mariadb_Version="${Mariadb_Ver#*-}"
+        if [ "${Bin}" = "y" ]; then
+            required_sources+=("${Mariadb_Ver}-linux-systemd-${DB_ARCH}.tar.gz")
+        else
+            required_sources+=("${Mariadb_Ver}.tar.gz")
+        fi
+    fi
+
+    if [ "${Stack}" != "lnmp" ]; then
+        required_sources+=("${Apache_Ver}.tar.bz2" "${APR_Ver}.tar.bz2" "${APR_Util_Ver}.tar.bz2")
+    fi
+
+    for source_name in "${required_sources[@]}"; do
+        if ! Get_Source_Checksum "${source_name}" >/dev/null 2>&1; then
+            Echo_Red "Missing trusted SHA256 entry: ${source_name}"
+            missing=1
+        fi
+    done
+
+    if [ "${missing}" -ne 0 ]; then
+        Echo_Red "Installation stopped before system changes because one or more source checksums are missing."
+        return 1
+    fi
+    return 0
+}
+
 Verify_Source_Checksum()
 {
     local FileName="$1"
     local Expected_SHA256="$2"
     local Actual_SHA256
 
+    if [ -L "${FileName}" ]; then
+        Echo_Red "Checksum refused for symbolic link: ${FileName}."
+        return 1
+    fi
     if [ ! -s "${FileName}" ]; then
         Echo_Red "Checksum failed: ${FileName} is missing or empty."
         return 1
@@ -975,7 +1072,7 @@ Validate_Download_URL()
     Host="${Host%%:*}"
     Host="${Host,,}"
     case "${Host}" in
-        *.edu|archive.apache.org|cdn.mysql.com|dev.mysql.com|download.pureftpd.org|download.redis.io|download.savannah.nongnu.org|downloads.mariadb.org|downloads.sourceforge.net|files.phpmyadmin.net|getcomposer.org|github.com|mirror.cs.uchicago.edu|mirror.math.princeton.edu|mirrors.mit.edu|museum.php.net|nginx.org|pecl.php.net|raw.githubusercontent.com|sourceforge.net|www.openssl.org|www.php.net)
+        archive.apache.org|archives.boost.io|cdn.mysql.com|curl.se|dev.mysql.com|download.pureftpd.org|download.redis.io|download.savannah.nongnu.org|downloads.mariadb.org|downloads.sourceforge.net|files.phpmyadmin.net|getcomposer.org|github.com|libzip.org|mirror.cs.uchicago.edu|mirror.math.princeton.edu|mirrors.mit.edu|museum.php.net|nginx.org|pecl.php.net|raw.githubusercontent.com|sourceforge.net|www.openssl.org|www.php.net)
             return 0
             ;;
         *)
@@ -989,7 +1086,7 @@ Validate_Archive_Entries()
 {
     local FileName="$1"
     local extension="${FileName##*.}"
-    local ListFile
+    local ListFile MetadataFile
 
     [ -f "${FileName}" ] || {
         Echo_Red "Archive validation failed: ${FileName} is missing."
@@ -1026,8 +1123,33 @@ Validate_Archive_Entries()
         }
         END { exit bad }
     ' "${ListFile}"; then
-        rm -f -- "${ListFile}"
-        return 0
+        MetadataFile=$(mktemp "${TMPDIR:-/tmp}/lnmp-archive-meta.XXXXXX") || {
+            rm -f -- "${ListFile}"
+            return 1
+        }
+        case "${extension}" in
+            gz|tgz)
+                tar --list --verbose --gzip --file "${FileName}" > "${MetadataFile}"
+                ;;
+            bz2)
+                tar --list --verbose --bzip2 --file "${FileName}" > "${MetadataFile}"
+                ;;
+            xz)
+                tar --list --verbose --xz --file "${FileName}" > "${MetadataFile}"
+                ;;
+        esac
+        if [ "$?" -ne 0 ]; then
+            rm -f -- "${ListFile}" "${MetadataFile}"
+            Echo_Red "Archive metadata listing failed: ${FileName}"
+            return 1
+        fi
+        if awk '$1 !~ /^[d-]/ { print "archive special files or links are not allowed: " $0 > "/dev/stderr"; bad = 1 } END { exit bad }' "${MetadataFile}"; then
+            rm -f -- "${ListFile}" "${MetadataFile}"
+            return 0
+        fi
+        rm -f -- "${ListFile}" "${MetadataFile}"
+        Echo_Red "Archive rejected because it contains a symbolic or hard link: ${FileName}"
+        return 1
     fi
     rm -f -- "${ListFile}"
     Echo_Red "Archive rejected because it contains an absolute or parent-directory path: ${FileName}"
@@ -1132,8 +1254,12 @@ Check_LNMPConf()
         Echo_Red "lnmp.conf was not exsit!"
         exit 1
     fi
-    if [[ "${Download_Mirror}" = "" || "${MySQL_Data_Dir}" = "" || "${MariaDB_Data_Dir}" = "" || "${Default_Website_Dir}" = "" ]]; then
+    if [[ "${University_Mirror:-}" = "" || "${Download_Mirror}" = "" || "${MySQL_Data_Dir}" = "" || "${MariaDB_Data_Dir}" = "" || "${Default_Website_Dir}" = "" ]]; then
         Echo_Red "Can't get values from lnmp.conf!"
+        exit 1
+    fi
+    if ! Validate_Download_URL "${University_Mirror}/" || ! Validate_Download_URL "${Download_Mirror}/"; then
+        Echo_Red "Download mirrors must use HTTPS and an allowlisted public source host."
         exit 1
     fi
     if [[ "${MySQL_Data_Dir}" = "/" || "${MariaDB_Data_Dir}" = "/" || "${Default_Website_Dir}" = "/" ]]; then
@@ -1192,7 +1318,8 @@ Print_APP_Ver()
 Print_Sys_Info()
 {
     echo "LNMP Version: ${LNMP_Ver}"
-    eval echo "${DISTRO} \${${DISTRO}_Version}"
+    local version_var="${DISTRO}_Version"
+    printf '%s %s\n' "${DISTRO}" "${!version_var:-unknown}"
     cat /etc/issue
     cat /etc/*-release
     uname -a
@@ -1358,22 +1485,112 @@ Check_DB()
     fi
 }
 
+Run_DB_Query()
+{
+    local query="$1"
+    shift
+    local query_file query_status
+
+    [ "$#" -gt 0 ] || return 2
+    query_file=$(mktemp "${TMPDIR:-/tmp}/lnmp-db-query.XXXXXX") || return 1
+    chmod 600 "${query_file}" || {
+        rm -f -- "${query_file}"
+        return 1
+    }
+    printf '%s\n' "${query}" >"${query_file}" || {
+        rm -f -- "${query_file}"
+        return 1
+    }
+    "$@" <"${query_file}"
+    query_status=$?
+    rm -f -- "${query_file}"
+    return "${query_status}"
+}
+
+Escape_SQL_String()
+{
+    local value="$1"
+
+    value="${value//\\/\\\\}"
+    value="${value//\'/\'\'}"
+    printf '%s' "${value}"
+}
+
 Do_Query()
 {
-    echo "$1" >/tmp/.mysql.tmp
+    local defaults_file
+
     Check_DB
-    ${MySQL_Bin} --defaults-file=~/.my.cnf </tmp/.mysql.tmp
-    return $?
+    defaults_file="${HOME:-/root}/.my.cnf"
+    Run_DB_Query "$1" "${MySQL_Bin}" "--defaults-file=${defaults_file}"
 }
 
 Make_TempMycnf()
 {
-    cat >~/.my.cnf<<EOF
-[client]
-user=root
-password='$1'
-EOF
-    chmod 600 ~/.my.cnf
+    local mycnf="${HOME:-/root}/.my.cnf"
+    local escaped_password="${1//\\/\\\\}"
+    escaped_password="${escaped_password//\"/\\\"}"
+
+    if [ -L "${mycnf}" ]; then
+        Echo_Red "Refusing to write database credentials through a symbolic link: ${mycnf}"
+        return 1
+    fi
+    if [ -e "${mycnf}" ] && [ ! -f "${mycnf}" ]; then
+        Echo_Red "Refusing to replace a non-regular database option path: ${mycnf}"
+        return 1
+    fi
+    if [ "${MYSQL_TEMP_CNF_BACKED_UP:-0}" -eq 0 ]; then
+        if [ -e "${mycnf}" ] || [ -L "${mycnf}" ]; then
+            MYSQL_TEMP_CNF_BACKUP=$(mktemp "${mycnf}.lnmp-backup.XXXXXX") || return 1
+            if ! cp -p -- "${mycnf}" "${MYSQL_TEMP_CNF_BACKUP}"; then
+                rm -f -- "${MYSQL_TEMP_CNF_BACKUP}"
+                MYSQL_TEMP_CNF_BACKUP=""
+                return 1
+            fi
+            chmod 600 "${MYSQL_TEMP_CNF_BACKUP}" || return 1
+        else
+            MYSQL_TEMP_CNF_BACKUP=""
+        fi
+        MYSQL_TEMP_CNF_BACKED_UP=1
+    fi
+
+    umask 077
+    printf '[client]\nuser=root\npassword="%s"\n' "${escaped_password}" >"${mycnf}" || return 1
+    chmod 600 "${mycnf}" || return 1
+}
+
+Make_Empty_TempMycnf()
+{
+    local temp_file
+
+    temp_file=$(mktemp "${TMPDIR:-/tmp}/lnmp-empty-mysql.XXXXXX") || return 1
+    if ! printf '%s\n' '[client]' 'user=root' "password=''" >"${temp_file}"; then
+        rm -f -- "${temp_file}"
+        return 1
+    fi
+    chmod 600 "${temp_file}" || {
+        rm -f -- "${temp_file}"
+        return 1
+    }
+    printf '%s\n' "${temp_file}"
+}
+
+Make_Temporary_DB_Option_File()
+{
+    local temp_file escaped_password
+
+    escaped_password="${1//\\/\\\\}"
+    escaped_password="${escaped_password//\"/\\\"}"
+    temp_file=$(mktemp "${TMPDIR:-/tmp}/lnmp-db-options.XXXXXX") || return 1
+    if ! printf '[client]\nuser=root\npassword="%s"\n' "${escaped_password}" >"${temp_file}"; then
+        rm -f -- "${temp_file}"
+        return 1
+    fi
+    chmod 600 "${temp_file}" || {
+        rm -f -- "${temp_file}"
+        return 1
+    }
+    printf '%s\n' "${temp_file}"
 }
 
 Verify_DB_Password()
@@ -1381,8 +1598,12 @@ Verify_DB_Password()
     Check_DB
     status=1
     while [ $status -eq 1 ]; do
-        read -s -p "Enter current root password of Database (Password will not shown): " DB_Root_Password
-        Make_TempMycnf "${DB_Root_Password}"
+        if ! read -r -s -p "Enter current root password of Database (Password will not shown): " DB_Root_Password; then
+            printf '\nError: input stream closed.\n' >&2
+            return 1
+        fi
+        printf '\n'
+        Make_TempMycnf "${DB_Root_Password}" || return 1
         Do_Query ""
         status=$?
     done
@@ -1391,12 +1612,18 @@ Verify_DB_Password()
 
 TempMycnf_Clean()
 {
-    if [ -s ~/.my.cnf ]; then
-        rm -f ~/.my.cnf
+    local mycnf="${HOME:-/root}/.my.cnf"
+
+    if [ "${MYSQL_TEMP_CNF_BACKED_UP:-0}" -eq 1 ]; then
+        if [ -n "${MYSQL_TEMP_CNF_BACKUP:-}" ] && [ -e "${MYSQL_TEMP_CNF_BACKUP}" ]; then
+            rm -f -- "${mycnf}" || return 1
+            mv -f -- "${MYSQL_TEMP_CNF_BACKUP}" "${mycnf}" || return 1
+        else
+            rm -f -- "${mycnf}" || return 1
+        fi
     fi
-    if [ -s /tmp/.mysql.tmp ]; then
-        rm -f /tmp/.mysql.tmp
-    fi
+    MYSQL_TEMP_CNF_BACKUP=""
+    MYSQL_TEMP_CNF_BACKED_UP=0
 }
 
 StartOrStop()

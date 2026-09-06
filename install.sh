@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
+umask 077
 export PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 set -o pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
+cd -- "${SCRIPT_DIR}" || exit 1
 
 # Check if user is root
 if [ $(id -u) != "0" ]; then
@@ -8,7 +12,7 @@ if [ $(id -u) != "0" ]; then
     exit 1
 fi
 
-cur_dir=$(pwd)
+cur_dir="${SCRIPT_DIR}"
 Stack=$1
 if [ "${Stack}" = "" ]; then
     Stack="lnmp"
@@ -57,12 +61,13 @@ echo "+------------------------------------------------------------------------+
 
 Init_Install()
 {
-    Press_Install
+    Press_Install || return 1
     Print_APP_Ver
     Get_Dist_Version
     Print_Sys_Info
     Check_Hosts || return 1
     Check_CMPT || return 1
+    Check_Core_Source_Manifest || return 1
     if [ "${CheckMirror}" != "n" ]; then
         Modify_Source || return 1
         Check_Mirror || return 1
@@ -157,7 +162,7 @@ Install_PHP()
     elif [ "${PHPSelect}" = "11" ]; then
         Install_PHP_85 || return 1
     fi
-    Clean_PHP_Src_Dir
+    Clean_PHP_Src_Dir || return 1
 }
 
 LNMP_Stack()
@@ -174,35 +179,35 @@ LNMP_Stack()
 
 LNMPA_Stack()
 {
-    Apache_Selection
-    Init_Install
+    Apache_Selection || return 1
+    Init_Install || return 1
     if [ "${ApacheSelect}" = "1" ]; then
-        Install_Apache_22
+        Install_Apache_22 || return 1
     else
-        Install_Apache_24
+        Install_Apache_24 || return 1
     fi
-    Install_PHP
-    Install_Nginx
-    Creat_PHP_Tools
-    Add_Iptables_Rules
-    Add_LNMPA_Startup
-    Check_LNMPA_Install
+    Install_PHP || return 1
+    Install_Nginx || return 1
+    Creat_PHP_Tools || return 1
+    Add_Iptables_Rules || return 1
+    Add_LNMPA_Startup || return 1
+    Check_LNMPA_Install || return 1
 }
 
 LAMP_Stack()
 {
-    Apache_Selection
-    Init_Install
+    Apache_Selection || return 1
+    Init_Install || return 1
     if [ "${ApacheSelect}" = "1" ]; then
-        Install_Apache_22
+        Install_Apache_22 || return 1
     else
-        Install_Apache_24
+        Install_Apache_24 || return 1
     fi
-    Install_PHP
-    Creat_PHP_Tools
-    Add_Iptables_Rules
-    Add_LAMP_Startup
-    Check_LAMP_Install
+    Install_PHP || return 1
+    Creat_PHP_Tools || return 1
+    Add_Iptables_Rules || return 1
+    Add_LAMP_Startup || return 1
+    Check_LAMP_Install || return 1
 }
 
 install_status=0

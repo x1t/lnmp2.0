@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
+umask 077
 export PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+set -o pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || exit 1
+cd -- "${SCRIPT_DIR}" || exit 1
 
 # Check if user is root
 if [ $(id -u) != "0" ]; then
@@ -7,7 +12,7 @@ if [ $(id -u) != "0" ]; then
     exit 1
 fi
 
-cur_dir=$(pwd)
+cur_dir="${SCRIPT_DIR}"
 action=$1
 shopt -s extglob
 Upgrade_Date=$(date +"%Y%m%d%H%M%S")
@@ -47,6 +52,14 @@ Display_Upgrade_Menu()
     read -p "Enter your choice (1, 2, 3, 4, 5, 6, 7 or exit): " action
 }
 
+Run_Upgrade()
+{
+    local log_file="$1"
+    shift
+    "$@" 2>&1 | tee "${log_file}"
+    return "${PIPESTATUS[0]}"
+}
+
 clear
 echo "+-----------------------------------------------------------------------+"
 echo "|            Upgrade script for LNMP V2.0, Written by Licess            |"
@@ -60,31 +73,40 @@ if [ "${action}" == "" ]; then
     Display_Upgrade_Menu
 fi
 
+upgrade_status=1
     case "${action}" in
     1|[nN][gG][iI][nN][xX])
-        Upgrade_Nginx 2>&1 | tee /root/upgrade_nginx${Upgrade_Date}.log
+        Run_Upgrade "/root/upgrade_nginx${Upgrade_Date}.log" Upgrade_Nginx
+        upgrade_status=$?
         ;;
     2|[mM][yY][sS][qQ][lL])
-        Upgrade_MySQL 2>&1 | tee /root/upgrade_mysq${Upgrade_Date}.log
+        Run_Upgrade "/root/upgrade_mysq${Upgrade_Date}.log" Upgrade_MySQL
+        upgrade_status=$?
         ;;
     3|[mM][aA][rR][iI][aA][dD][bB])
-        Upgrade_MariaDB 2>&1 | tee /root/upgrade_mariadb${Upgrade_Date}.log
+        Run_Upgrade "/root/upgrade_mariadb${Upgrade_Date}.log" Upgrade_MariaDB
+        upgrade_status=$?
         ;;
     4|[pP][hP][pP])
         Stack="lnmp"
-        Upgrade_PHP 2>&1 | tee /root/upgrade_lnmp_php${Upgrade_Date}.log
+        Run_Upgrade "/root/upgrade_lnmp_php${Upgrade_Date}.log" Upgrade_PHP
+        upgrade_status=$?
         ;;
     5|[pP][hP][pP][aA])
-        Upgrade_PHP 2>&1 | tee /root/upgrade_a_php${Upgrade_Date}.log
+        Run_Upgrade "/root/upgrade_a_php${Upgrade_Date}.log" Upgrade_PHP
+        upgrade_status=$?
         ;;
     6|[mM]2[mY])
-        Upgrade_MySQL2MariaDB 2>&1 | tee /root/upgrade_mysql2mariadb${Upgrade_Date}.log
+        Run_Upgrade "/root/upgrade_mysql2mariadb${Upgrade_Date}.log" Upgrade_MySQL2MariaDB
+        upgrade_status=$?
         ;;
     7|[pP][hH][pP][mM][yY][aA][dD][mM][iI][nN])
-        Upgrade_phpMyAdmin 2>&1 | tee /root/upgrade_phpmyadmin${Upgrade_Date}.log
+        Run_Upgrade "/root/upgrade_phpmyadmin${Upgrade_Date}.log" Upgrade_phpMyAdmin
+        upgrade_status=$?
         ;;
     8|[mM][pP][hH][pP])
-        Upgrade_Multiplephp 2>&1 | tee /root/upgrade_mphp${Upgrade_Date}.log
+        Run_Upgrade "/root/upgrade_mphp${Upgrade_Date}.log" Upgrade_Multiplephp
+        upgrade_status=$?
         ;;
     [eE][xX][iI][tT])
         exit 1
@@ -94,3 +116,5 @@ fi
         exit 1
     ;;
     esac
+
+exit "${upgrade_status}"

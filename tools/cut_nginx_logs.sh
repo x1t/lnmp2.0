@@ -15,16 +15,20 @@ save_days=30
 ############################################
 #Please do not modify the following script #
 ############################################
-mkdir -p $log_files_dir
+mkdir -p -- "${log_files_dir}" || exit 1
 
 log_files_num=${#log_files_name[@]}
 
 #cut nginx log files
-for((i=0;i<$log_files_num;i++));do
-mv ${log_files_path}${log_files_name[i]}.log ${log_files_dir}/${log_files_name[i]}_$(date -d "yesterday" +"%Y%m%d").log
+for ((i=0; i<log_files_num; i++)); do
+    source_log="${log_files_path}${log_files_name[i]}.log"
+    target_log="${log_files_dir}/${log_files_name[i]}_$(date -d "yesterday" +"%Y%m%d").log"
+    if [ -f "${source_log}" ]; then
+        mv -f -- "${source_log}" "${target_log}" || exit 1
+    fi
 done
 
 #delete 30 days ago nginx log files
-find $log_files_path -mtime +$save_days -exec rm -rf {} \; 
+find "${log_files_path}" -type f -name '*.log' -mtime "+${save_days}" -delete
 
-$nginx_sbin -s reload
+"${nginx_sbin}" -s reload

@@ -32,36 +32,34 @@ Install_Only_Nginx()
     echo "+-----------------------------------------------------------------------+"
     echo "|           For more information please visit https://lnmp.org          |"
     echo "+-----------------------------------------------------------------------+"
-    Press_Install
+    Press_Install || return 1
     Echo_Blue "Install dependent packages..."
-    cd ${cur_dir}/src
+    cd "${cur_dir}/src" || return 1
     Get_Dist_Version
-    Modify_Source
-    Nginx_Dependent
-    cd ${cur_dir}/src
-    # Use official PCRE download from GitHub
-    Download_Files https://github.com/PCRE2Project/pcre2/releases/download/pcre2-${Pcre_Ver##*-}/${Pcre_Ver}.tar.bz2 ${Pcre_Ver}.tar.bz2
-    if [ $? -ne 0 ]; then
-        # Fallback to SourceForge for older PCRE versions
-        Download_Files https://sourceforge.net/projects/pcre/files/pcre/${Pcre_Ver##*-}/${Pcre_Ver}.tar.bz2/download ${Pcre_Ver}.tar.bz2
+    Modify_Source || return 1
+    Nginx_Dependent || return 1
+    cd "${cur_dir}/src" || return 1
+    # Use the public university mirror for the PCRE1 archive, with SourceForge fallback.
+    if ! Download_Files "${University_Mirror}/macports/distfiles/pcre/${Pcre_Ver}.tar.bz2" "${Pcre_Ver}.tar.bz2"; then
+        Download_Files "https://sourceforge.net/projects/pcre/files/pcre/${Pcre_Ver##*-}/${Pcre_Ver}.tar.bz2/download" "${Pcre_Ver}.tar.bz2" || return 1
     fi
-    Install_Pcre
+    Install_Pcre || return 1
     if [ `grep -L '/usr/local/lib'    '/etc/ld.so.conf'` ]; then
         echo "/usr/local/lib" >> /etc/ld.so.conf
     fi
     ldconfig
     # Use official Nginx download
-    Download_Files https://nginx.org/download/${Nginx_Ver}.tar.gz ${Nginx_Ver}.tar.gz
-    Install_Nginx
-    StartUp nginx
-    rm -rf ${cur_dir}/src/${Nginx_Ver}
+    Download_Files "https://nginx.org/download/${Nginx_Ver}.tar.gz" "${Nginx_Ver}.tar.gz" || return 1
+    Install_Nginx || return 1
+    StartUp nginx || return 1
+    rm -rf -- "${cur_dir}/src/${Nginx_Ver}"
     [[ -d "${cur_dir}/src/${Openssl_Ver}" ]] && rm -rf ${cur_dir}/src/${Openssl_Ver}
     [[ -d "${cur_dir}/src/${Openssl_New_Ver}" ]] && rm -rf ${cur_dir}/src/${Openssl_New_Ver}
-    StartOrStop start nginx
-    Add_Iptables_Rules
-    \cp ${cur_dir}/conf/index.html ${Default_Website_Dir}/index.html
-    \cp ${cur_dir}/conf/lnmp /bin/lnmp
-    Check_Nginx_Files
+    StartOrStop start nginx || return 1
+    Add_Iptables_Rules || return 1
+    \cp "${cur_dir}/conf/index.html" "${Default_Website_Dir}/index.html" || return 1
+    \cp "${cur_dir}/conf/lnmp" /bin/lnmp || return 1
+    Check_Nginx_Files || return 1
 }
 
 DB_Dependent()
@@ -147,13 +145,14 @@ DB_Dependent()
 Install_Database()
 {
     echo "============================check files=================================="
-    cd ${cur_dir}/src
+    cd "${cur_dir}/src" || return 1
     if Is_MySQL_DB; then
         if [[ "${Bin}" = "y" && "${DBSelect}" =~ ^[2-4]$ ]]; then
             Mysql_Ver_Short=$(echo ${Mysql_Ver} | sed 's/mysql-//' | cut -d. -f1-2)
-            Download_Files https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz
-            [[ $? -ne 0 ]] && Download_Files https://cdn.mysql.com/archives/mysql-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz
-            if [ ! -s ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz ]; then
+            if ! Download_Files "https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz" "${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz"; then
+                Download_Files "https://cdn.mysql.com/archives/mysql-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz" "${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz" || return 1
+            fi
+            if [ ! -s "${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz" ]; then
                 Echo_Red "Error! Unable to download MySQL ${Mysql_Ver_Short} Generic Binaries, please download it to src directory manually."
                 sleep 5
                 exit 1
@@ -171,8 +170,8 @@ Install_Database()
             fi
         else
             Mysql_Ver_Short=$(echo ${Mysql_Ver} | sed 's/mysql-//' | cut -d. -f1-2)
-            Download_Files "https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}.tar.gz" "${Mysql_Ver}.tar.gz"
-            if [ ! -s ${Mysql_Ver}.tar.gz ]; then
+            Download_Files "https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}.tar.gz" "${Mysql_Ver}.tar.gz" || return 1
+            if [ ! -s "${Mysql_Ver}.tar.gz" ]; then
                 Echo_Red "Error! Unable to download MySQL source code, please download it to src directory manually."
                 sleep 5
                 exit 1
@@ -185,8 +184,8 @@ Install_Database()
         else
             MariaDB_FileName="${Mariadb_Ver}"
         fi
-        Download_Files https://downloads.mariadb.org/rest-api/mariadb/${Mariadb_Version}/${MariaDB_FileName}.tar.gz ${MariaDB_FileName}.tar.gz
-        if [ ! -s ${MariaDB_FileName}.tar.gz ]; then
+        Download_Files "https://downloads.mariadb.org/rest-api/mariadb/${Mariadb_Version}/${MariaDB_FileName}.tar.gz" "${MariaDB_FileName}.tar.gz" || return 1
+        if [ ! -s "${MariaDB_FileName}.tar.gz" ]; then
             Echo_Red "Error! Unable to download MariaDB, please download it to src directory manually."
             sleep 5
             exit 1
@@ -196,52 +195,52 @@ Install_Database()
 
     Echo_Blue "Install dependent packages..."
     Get_Dist_Version
-    Modify_Source
-    DB_Dependent
-    Check_Openssl
+    Modify_Source || return 1
+    DB_Dependent || return 1
+    Check_Openssl || return 1
     if [ "${DBSelect}" = "1" ]; then
-        Install_MySQL_51
+        Install_MySQL_51 || return 1
     elif [ "${DBSelect}" = "2" ]; then
-        Install_MySQL_55
+        Install_MySQL_55 || return 1
     elif [ "${DBSelect}" = "3" ]; then
-        Install_MySQL_56
+        Install_MySQL_56 || return 1
     elif [ "${DBSelect}" = "4" ]; then
-        Install_MySQL_57
+        Install_MySQL_57 || return 1
     elif [ "${DBSelect}" = "5" ]; then
-        Install_MySQL_80
+        Install_MySQL_80 || return 1
     elif [ "${DBSelect}" = "11" ]; then
-        Install_MySQL_84
+        Install_MySQL_84 || return 1
     elif [ "${DBSelect}" = "12" ]; then
-        Install_MySQL_97
+        Install_MySQL_97 || return 1
     elif [ "${DBSelect}" = "6" ]; then
-        Install_MariaDB_5
+        Install_MariaDB_5 || return 1
     elif [ "${DBSelect}" = "7" ]; then
-        Install_MariaDB_103
+        Install_MariaDB_103 || return 1
     elif [ "${DBSelect}" = "8" ]; then
-        Install_MariaDB_104
+        Install_MariaDB_104 || return 1
     elif [ "${DBSelect}" = "9" ]; then
-        Install_MariaDB_105
+        Install_MariaDB_105 || return 1
     elif [ "${DBSelect}" = "10" ]; then
-        Install_MariaDB_106
+        Install_MariaDB_106 || return 1
     fi
-    TempMycnf_Clean
+    TempMycnf_Clean || return 1
 
     if Is_MariaDB_DB; then
-        StartUp mariadb
-        StartOrStop start mariadb
+        StartUp mariadb || return 1
+        StartOrStop start mariadb || return 1
     elif Is_MySQL_DB; then
-        StartUp mysql
-        StartOrStop start mysql
+        StartUp mysql || return 1
+        StartOrStop start mysql || return 1
     fi
 
-    Clean_DB_Src_Dir
-    Check_DB_Files
+    Clean_DB_Src_Dir || return 1
+    Check_DB_Files || return 1
     if [[ "${isDB}" = "ok" ]]; then
         if Is_MySQL_DB; then
-            Echo_Green "MySQL root password: ${DB_Root_Password}"
+            Echo_Green "MySQL root password has been configured."
             Echo_Green "Install ${Mysql_Ver} completed! enjoy it."
         elif Is_MariaDB_DB; then
-            Echo_Green "MariaDB root password: ${DB_Root_Password}"
+            Echo_Green "MariaDB root password has been configured."
             Echo_Green "Install ${Mariadb_Ver} completed! enjoy it."
         fi
     fi
@@ -271,6 +270,7 @@ Install_Only_Database()
         exit 1
     fi
     Echo_Red "The script will REMOVE MySQL/MariaDB installed via yum or apt-get and it's databases!!!"
-    Press_Install
+    Press_Install || return 1
     Install_Database 2>&1 | tee /root/install_database.log
+    return "${PIPESTATUS[0]}"
 }

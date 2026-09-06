@@ -101,7 +101,12 @@ Deb_RemoveAMP()
             apt-get purge -y "${installed_packages[@]}" || return 1
         fi
     fi
-    killall apache2 >/dev/null 2>&1 || true
+    if [ -x /etc/init.d/apache2 ]; then
+        /etc/init.d/apache2 stop >/dev/null 2>&1 || true
+    fi
+    if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet apache2.service; then
+        systemctl stop apache2.service || return 1
+    fi
     apt-get clean || return 1
 }
 
@@ -128,14 +133,12 @@ Check_Hosts()
         echo "127.0.0.1 localhost.localdomain localhost" >> /etc/hosts
     fi
     if [ "${CheckMirror}" != "n" ]; then
-        pingresult=`ping -c1 google.com 2>&1`
-        echo "${pingresult}"
-        if echo "${pingresult}" | grep -q "unknown host"; then
-            echo "DNS...fail"
-            echo "Writing nameserver to /etc/resolv.conf ..."
-            echo -e "nameserver 208.67.220.220\nnameserver 114.114.114.114" > /etc/resolv.conf
-        else
+        if getent hosts mirror.math.princeton.edu >/dev/null 2>&1; then
             echo "DNS...ok"
+        else
+            Echo_Red "DNS resolution failed for the configured public source mirror."
+            Echo_Red "Fix /etc/resolv.conf before continuing; the installer will not overwrite it."
+            return 1
         fi
     fi
 }
@@ -146,38 +149,77 @@ RHEL_Modify_Source()
     if [ "${RHELRepo}" = "local" ]; then
         echo "DO NOT change RHEL repository, use the repository you set."
     else
-        echo "RHEL ${RHEL_Ver} will use aliyun centos repository..."
-        if [ ! -s "/etc/yum.repos.d/Centos-${RHEL_Ver}.repo" ]; then
-            if command -v curl >/dev/null 2>&1; then
-                curl --fail --silent --show-error --proto '=https' --tlsv1.2 https://mirrors.aliyun.com/repo/Centos-${RHEL_Ver}.repo -o /etc/yum.repos.d/Centos-${RHEL_Ver}.repo
-            else
-                wget --prefer-family=IPv4 --https-only https://mirrors.aliyun.com/repo/Centos-${RHEL_Ver}.repo -O /etc/yum.repos.d/Centos-${RHEL_Ver}.repo
-            fi
-        fi
-        if echo "${RHEL_Version}" | grep -Eqi "^6"; then
-            sed -i "s#centos/\$releasever#centos-vault/\$releasever#g" /etc/yum.repos.d/Centos-${RHEL_Ver}.repo
-            sed -i "s/\$releasever/${RHEL_Version}/g" /etc/yum.repos.d/Centos-${RHEL_Ver}.repo
-        elif echo "${RHEL_Version}" | grep -Eqi "^7"; then
-            sed -i "s/\$releasever/7/g" /etc/yum.repos.d/Centos-${RHEL_Ver}.repo
-        elif echo "${RHEL_Version}" | grep -Eqi "^8"; then
-            sed -i "s#centos/\$releasever#centos-vault/8.5.2111#g" /etc/yum.repos.d/Centos-${RHEL_Ver}.repo
-        elif echo "${RHEL_Version}" | grep -Eqi "^9"; then
-            [[ -s /etc/yum.repos.d/Centos-9.repo ]] && rm -f /etc/yum.repos.d/Centos-9.repo
-            \cp ${cur_dir}/conf/rhel-9.repo /etc/yum.repos.d/Centos-9.repo
-        fi
-        yum clean all
-        yum makecache
+        local repo_file="/etc/yum.repos.d/Centos-${RHEL_Ver}.repo"
+        echo "RHEL ${RHEL_Ver} will use the bundled HTTPS university mirror configuration..."
+        case "${RHEL_Ver}" in
+            6)
+                cp -f -- "${cur_dir}/conf/CentOS6-Base-Vault.repo" "${repo_file}" || return 1
+                ;;
+            7)
+                cat >"${repo_file}" <<'EOF'
+[base]
+name=CentOS-7.9.2009 - Base - mirror.lt.ucsc.edu
+baseurl=https://mirror.lt.ucsc.edu/centos/7.9.2009/os/$basearch/
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-7
+enabled=1
+
+[updates]
+name=CentOS-7.9.2009 - Updates - mirror.lt.ucsc.edu
+baseurl=https://mirror.lt.ucsc.edu/centos/7.9.2009/updates/$basearch/
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-7
+enabled=1
+
+[extras]
+name=CentOS-7.9.2009 - Extras - mirror.lt.ucsc.edu
+baseurl=https://mirror.lt.ucsc.edu/centos/7.9.2009/extras/$basearch/
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-7
+enabled=1
+
+[centosplus]
+name=CentOS-7.9.2009 - Plus - mirror.lt.ucsc.edu
+baseurl=https://mirror.lt.ucsc.edu/centos/7.9.2009/centosplus/$basearch/
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-7
+enabled=0
+
+[contrib]
+name=CentOS-7.9.2009 - Contrib - mirror.lt.ucsc.edu
+baseurl=https://mirror.lt.ucsc.edu/centos/7.9.2009/contrib/$basearch/
+gpgcheck=1
+gpgkey=https://www.centos.org/keys/RPM-GPG-KEY-CentOS-7
+enabled=0
+EOF
+                ;;
+            8)
+                cp -f -- "${cur_dir}/conf/CentOS8-vault.repo" "${repo_file}" || return 1
+                ;;
+            9)
+                cp -f -- "${cur_dir}/conf/rhel-9.repo" "${repo_file}" || return 1
+                ;;
+            *)
+                Echo_Red "No bundled verified RHEL repository configuration for RHEL ${RHEL_Ver}."
+                Echo_Red "Set RHELRepo=local and configure a trusted repository before continuing."
+                return 1
+                ;;
+        esac
+        yum clean all || return 1
+        yum makecache || return 1
     fi
-    sed -i "s/^enabled[ ]*=[ ]*1/enabled=0/" /etc/yum/pluginconf.d/subscription-manager.conf
+    if [ -f /etc/yum/pluginconf.d/subscription-manager.conf ]; then
+        sed -i "s/^enabled[ ]*=[ ]*1/enabled=0/" /etc/yum/pluginconf.d/subscription-manager.conf || return 1
+    fi
 }
 
 Ubuntu_Modify_Source()
 {
-    if [ "${country}" = "CN" ]; then
-        OldReleasesURL='https://mirrors.ustc.edu.cn/ubuntu-old-releases/'
-    else
-        OldReleasesURL='https://old-releases.ubuntu.com/ubuntu/'
-    fi
+    OldReleasesURL='https://old-releases.ubuntu.com/ubuntu/'
     CodeName=''
     if grep -Eqi "10.10" /etc/*-release || echo "${Ubuntu_Version}" | grep -Eqi '^10.10'; then
         CodeName='maverick'
@@ -402,8 +444,6 @@ CentOS_Dependent()
             if [ "${country}" = "CN" ]; then
                 sed -e 's!^metalink=!#metalink=!g' \
                     -e 's!^#baseurl=!baseurl=!g' \
-                    -e 's!//download\.fedoraproject\.org/pub!//mirrors.ustc.edu.cn!g' \
-                    -e 's!//download\.example/pub!//mirrors.ustc.edu.cn!g' \
                     -i /etc/yum.repos.d/epel*.repo
             fi
         fi
@@ -461,7 +501,7 @@ Deb_Dependent()
 Check_Download()
 {
     Echo_Blue "[+] Downloading files..."
-    cd ${cur_dir}/src
+    cd "${cur_dir}/src" || return 1
     Download_Files "${Download_Mirror}/libiconv/${Libiconv_Ver}.tar.gz" "${Libiconv_Ver}.tar.gz" || return 1
     if [[ "${PHPSelect}" =~ ^[1-5]$ ]]; then
         Download_Files "${Download_Mirror}/libmcrypt/${LibMcrypt_Ver}.tar.bz2" "${LibMcrypt_Ver}.tar.bz2" || return 1
@@ -482,9 +522,8 @@ Check_Download()
     if Is_MySQL_DB; then
         if [[ "${Bin}" = "y" && "${DBSelect}" =~ ^[2-4]$ ]]; then
             Mysql_Ver_Short=$(echo ${Mysql_Ver} | sed 's/mysql-//' | cut -d. -f1-2)
-            Download_Files https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz
-            if [ $? -ne 0 ]; then
-                Download_Files https://cdn.mysql.com/archives/mysql-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz ${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz
+            if ! Download_Files "https://cdn.mysql.com/Downloads/MySQL-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz" "${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz"; then
+                Download_Files "https://cdn.mysql.com/archives/mysql-${Mysql_Ver_Short}/${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz" "${Mysql_Ver}-linux-glibc2.12-${DB_ARCH}.tar.gz" || return 1
             fi
         elif [[ "${Bin}" = "y" ]] && Is_Modern_MySQL_DB; then
             mysql8_file=$(Get_MySQL_Binary_File "${Mysql_Ver}" "${DB_ARCH}") || return 1
@@ -505,9 +544,7 @@ Check_Download()
         fi
         Download_Files "https://downloads.mariadb.org/rest-api/mariadb/${Mariadb_Version}/${MariaDB_FileName}.tar.gz" "${MariaDB_FileName}.tar.gz" || return 1
     fi
-    if ! Download_Files "${University_Mirror}/php/distributions/${Php_Ver}.tar.bz2" "${Php_Ver}.tar.bz2"; then
-        Download_Files "https://www.php.net/distributions/${Php_Ver}.tar.bz2" "${Php_Ver}.tar.bz2" || return 1
-    fi
+    Download_Files "https://www.php.net/distributions/${Php_Ver}.tar.bz2" "${Php_Ver}.tar.bz2" || return 1
     # Note: PHP-FPM patch no longer needed for PHP 7+
     PhpMyAdmin_Version="${PhpMyAdmin_Ver#phpMyAdmin-}"
     PhpMyAdmin_Version="${PhpMyAdmin_Version%%-*}"
@@ -518,9 +555,9 @@ Check_Download()
     echo "Note: Probe file download skipped for security reasons"
     if [ "${Stack}" != "lnmp" ]; then
         # Use official Apache download
-        Download_Files https://archive.apache.org/dist/httpd/${Apache_Ver}.tar.bz2 ${Apache_Ver}.tar.bz2
-        Download_Files https://archive.apache.org/dist/apr/${APR_Ver}.tar.bz2 ${APR_Ver}.tar.bz2
-        Download_Files https://archive.apache.org/dist/apr/${APR_Util_Ver}.tar.bz2 ${APR_Util_Ver}.tar.bz2
+        Download_Files "https://archive.apache.org/dist/httpd/${Apache_Ver}.tar.bz2" "${Apache_Ver}.tar.bz2" || return 1
+        Download_Files "https://archive.apache.org/dist/apr/${APR_Ver}.tar.bz2" "${APR_Ver}.tar.bz2" || return 1
+        Download_Files "https://archive.apache.org/dist/apr/${APR_Util_Ver}.tar.bz2" "${APR_Util_Ver}.tar.bz2" || return 1
     fi
 }
 
@@ -549,13 +586,13 @@ PHP_Make_Install()
 Install_Autoconf()
 {
     Echo_Blue "[+] Installing ${Autoconf_Ver}"
-    cd ${cur_dir}/src
-    Download_Files ${Download_Mirror}/lib/autoconf/${Autoconf_Ver}.tar.gz ${Autoconf_Ver}.tar.gz
-    Tar_Cd ${Autoconf_Ver}.tar.gz ${Autoconf_Ver}
-    ./configure --prefix=/usr/local/autoconf-2.13
-    Make_Install
-    cd ${cur_dir}/src/
-    rm -rf ${cur_dir}/src/${Autoconf_Ver}
+    cd "${cur_dir}/src" || return 1
+    Download_Files "${University_Mirror}/gnu/autoconf/${Autoconf_Ver}.tar.gz" "${Autoconf_Ver}.tar.gz" || return 1
+    Tar_Cd "${Autoconf_Ver}.tar.gz" "${Autoconf_Ver}" || return 1
+    ./configure --prefix=/usr/local/autoconf-2.13 || return 1
+    Make_Install || return 1
+    cd "${cur_dir}/src/" || return 1
+    rm -rf -- "${cur_dir}/src/${Autoconf_Ver}"
 }
 
 Install_Libiconv()
@@ -644,18 +681,18 @@ Install_Curl()
 {
     if [[ ! -s /usr/local/curl/bin/curl || ! -s /usr/local/curl/lib/libcurl.so || ! -s /usr/local/curl/include/curl/curl.h ]]; then
         Echo_Blue "[+] Installing ${Curl_Ver}"
-        cd ${cur_dir}/src
-        Download_Files ${Download_Mirror}/lib/curl/${Curl_Ver}.tar.bz2 ${Curl_Ver}.tar.bz2
-        Tar_Cd ${Curl_Ver}.tar.bz2 ${Curl_Ver}
+        cd "${cur_dir}/src" || return 1
+        Download_Files "https://curl.se/download/${Curl_Ver}.tar.bz2" "${Curl_Ver}.tar.bz2" || return 1
+        Tar_Cd "${Curl_Ver}.tar.bz2" "${Curl_Ver}" || return 1
         if [ -s /usr/local/openssl/bin/openssl ] || /usr/local/openssl/bin/openssl version | grep -Eqi 'OpenSSL 1.0.2'; then
-            ./configure --prefix=/usr/local/curl --enable-ares --without-nss --with-zlib --with-ssl=/usr/local/openssl
+            ./configure --prefix=/usr/local/curl --enable-ares --without-nss --with-zlib --with-ssl=/usr/local/openssl || return 1
         else
-            ./configure --prefix=/usr/local/curl --enable-ares --without-nss --with-zlib --with-ssl
+            ./configure --prefix=/usr/local/curl --enable-ares --without-nss --with-zlib --with-ssl || return 1
         fi
-        Make_Install
-        cd ${cur_dir}/src/
-        rm -rf ${cur_dir}/src/${Curl_Ver}
-        ldconfig
+        Make_Install || return 1
+        cd "${cur_dir}/src/" || return 1
+        rm -rf -- "${cur_dir}/src/${Curl_Ver}"
+        ldconfig || return 1
     fi
     Remove_Error_Libcurl
 }
@@ -681,13 +718,13 @@ Install_Pcre()
 Install_Jemalloc()
 {
     Echo_Blue "[+] Installing ${Jemalloc_Ver}"
-    cd ${cur_dir}/src
-    Tar_Cd ${Jemalloc_Ver}.tar.bz2 ${Jemalloc_Ver}
-    ./configure
-    Make_Install
-    ldconfig
-    cd ${cur_dir}/src/
-    rm -rf ${cur_dir}/src/${Jemalloc_Ver}
+    cd "${cur_dir}/src" || return 1
+    Tar_Cd "${Jemalloc_Ver}.tar.bz2" "${Jemalloc_Ver}" || return 1
+    ./configure || return 1
+    Make_Install || return 1
+    ldconfig || return 1
+    cd "${cur_dir}/src/" || return 1
+    rm -rf -- "${cur_dir}/src/${Jemalloc_Ver}"
     ln -sf /usr/local/lib/libjemalloc* /usr/lib/
 }
 
@@ -695,22 +732,22 @@ Install_TCMalloc()
 {
     Echo_Blue "[+] Installing ${TCMalloc_Ver}"
     if [ "${Is_64bit}" = "y" ]; then
-        Tar_Cd ${Libunwind_Ver}.tar.gz ${Libunwind_Ver}
-        CFLAGS=-fPIC ./configure
-        make CFLAGS=-fPIC
-        make CFLAGS=-fPIC install
-        rm -rf ${cur_dir}/src/${Libunwind_Ver}
+        Tar_Cd "${Libunwind_Ver}.tar.gz" "${Libunwind_Ver}" || return 1
+        CFLAGS=-fPIC ./configure || return 1
+        make CFLAGS=-fPIC || return 1
+        make CFLAGS=-fPIC install || return 1
+        rm -rf -- "${cur_dir}/src/${Libunwind_Ver}"
     fi
-    Tar_Cd ${TCMalloc_Ver}.tar.gz ${TCMalloc_Ver}
+    Tar_Cd "${TCMalloc_Ver}.tar.gz" "${TCMalloc_Ver}" || return 1
     if [ "${Is_64bit}" = "y" ]; then
-        ./configure
+        ./configure || return 1
     else
-        ./configure --enable-frame-pointers
+        ./configure --enable-frame-pointers || return 1
     fi
-    Make_Install
-    ldconfig
-    cd ${cur_dir}/src/
-    rm -rf ${cur_dir}/src/${TCMalloc_Ver}
+    Make_Install || return 1
+    ldconfig || return 1
+    cd "${cur_dir}/src/" || return 1
+    rm -rf -- "${cur_dir}/src/${TCMalloc_Ver}"
     ln -sf /usr/local/lib/libtcmalloc* /usr/lib/
 }
 
@@ -718,16 +755,16 @@ Install_Icu4c()
 {
     if command -v icu-config >/dev/null 2>&1 && icu-config --version | grep -Eq "^3."; then
         Echo_Blue "[+] Installing ${Libicu4c_Ver}"
-        cd ${cur_dir}/src
-        Download_Files ${Download_Mirror}/lib/icu4c/${Libicu4c_Ver}-src.tgz ${Libicu4c_Ver}-src.tgz
-        Tar_Cd ${Libicu4c_Ver}-src.tgz icu/source
-        ./configure --prefix=/usr
+        cd "${cur_dir}/src" || return 1
+        Download_Files "https://github.com/unicode-org/icu/releases/download/release-58-3/${Libicu4c_Ver}-src.tgz" "${Libicu4c_Ver}-src.tgz" || return 1
+        Tar_Cd "${Libicu4c_Ver}-src.tgz" "icu/source" || return 1
+        ./configure --prefix=/usr || return 1
         if [ ! -s /usr/include/xlocale.h ]; then
             ln -s /usr/include/locale.h /usr/include/xlocale.h
         fi
-        Make_Install
-        cd ${cur_dir}/src/
-        rm -rf ${cur_dir}/src/icu
+        Make_Install || return 1
+        cd "${cur_dir}/src/" || return 1
+        rm -rf -- "${cur_dir}/src/icu"
     fi
 }
 
@@ -735,15 +772,15 @@ Install_Icu60()
 {
     if [ ! -s /usr/local/icu/bin/icu-config ]; then
         Echo_Blue "[+] Installing icu4c-60_3..."
-        cd ${cur_dir}/src
-        Download_Files ${Download_Mirror}/lib/icu4c/icu4c-60_3-src.tgz icu4c-60_3-src.tgz
-        Tar_Cd icu4c-60_3-src.tgz icu/source
-        ./configure --prefix=/usr/local/icu
-        Make_Install
-        cd ${cur_dir}/src/
+        cd "${cur_dir}/src" || return 1
+        Download_Files "https://github.com/unicode-org/icu/releases/download/release-60-3/icu4c-60_3-src.tgz" "icu4c-60_3-src.tgz" || return 1
+        Tar_Cd "icu4c-60_3-src.tgz" "icu/source" || return 1
+        ./configure --prefix=/usr/local/icu || return 1
+        Make_Install || return 1
+        cd "${cur_dir}/src/" || return 1
 
         echo "/usr/local/icu/lib" > /etc/ld.so.conf.d/icu.conf
-        ldconfig
+        ldconfig || return 1
     fi
 }
 
@@ -751,10 +788,10 @@ Download_Boost()
 {
     Echo_Blue "[+] Download or use exist boost..."
     if [ "${DBSelect}" = "4" ] || echo "${mysql_version}" | grep -Eqi '^5.7.'; then
-        if ! Download_Files "https://mirrors.mit.edu/macports/distfiles/boost/${Boost_Ver}.tar.bz2" "${cur_dir}/src/${Boost_Ver}.tar.bz2"; then
-            if ! Download_Files "https://sourceforge.net/projects/boost/files/boost/1.59.0/${Boost_Ver}.tar.bz2/download" "${cur_dir}/src/${Boost_Ver}.tar.bz2"; then
-                Download_Files "${Download_Mirror}/lib/boost/${Boost_Ver}.tar.bz2" "${cur_dir}/src/${Boost_Ver}.tar.bz2" || return 1
-            fi
+        local Boost_Release="${Boost_Ver#boost_}"
+        Boost_Release="${Boost_Release//_/.}"
+        if ! Download_Files "https://archives.boost.io/release/${Boost_Release}/source/${Boost_Ver}.tar.bz2" "${cur_dir}/src/${Boost_Ver}.tar.bz2"; then
+            Download_Files "https://sourceforge.net/projects/boost/files/boost/${Boost_Release}/${Boost_Ver}.tar.bz2/download" "${cur_dir}/src/${Boost_Ver}.tar.bz2" || return 1
         fi
         [[ -d "${cur_dir}/src/${Boost_Ver}" ]] && rm -rf "${cur_dir}/src/${Boost_Ver}"
         Extract_Archive "${cur_dir}/src/${Boost_Ver}.tar.bz2" "${cur_dir}/src" || return 1
@@ -762,10 +799,8 @@ Download_Boost()
     elif Is_Modern_MySQL_DB || Is_Modern_MySQL_Version; then
         Get_Boost_Ver=$(grep 'SET(BOOST_PACKAGE_NAME' cmake/boost.cmake |grep -oP '\d+(\_\d+){2}')
         local Boost_Package="boost_${Get_Boost_Ver}.tar.bz2"
-        if ! Download_Files "https://mirrors.mit.edu/macports/distfiles/boost/${Boost_Package}" "${cur_dir}/src/${Boost_Package}"; then
-            if ! Download_Files "https://sourceforge.net/projects/boost/files/boost/${Get_Boost_Ver//_/.}/${Boost_Package}/download" "${cur_dir}/src/${Boost_Package}"; then
-                Download_Files "${Download_Mirror}/lib/boost/${Boost_Package}" "${cur_dir}/src/${Boost_Package}" || return 1
-            fi
+        if ! Download_Files "https://archives.boost.io/release/${Get_Boost_Ver//_/.}/source/${Boost_Package}" "${cur_dir}/src/${Boost_Package}"; then
+            Download_Files "https://sourceforge.net/projects/boost/files/boost/${Get_Boost_Ver//_/.}/${Boost_Package}/download" "${cur_dir}/src/${Boost_Package}" || return 1
         fi
         [[ -d "${cur_dir}/src/boost_${Get_Boost_Ver}" ]] && rm -rf "${cur_dir}/src/boost_${Get_Boost_Ver}"
         Extract_Archive "${cur_dir}/src/${Boost_Package}" "${cur_dir}/src" || return 1
@@ -811,19 +846,18 @@ Install_Openssl()
 {
     if [ ! -s /usr/local/openssl/bin/openssl ] || /usr/local/openssl/bin/openssl version | grep -v 'OpenSSL 1.0.2'; then
         Echo_Blue "[+] Installing ${Openssl_Ver}"
-        cd ${cur_dir}/src
+        cd "${cur_dir}/src" || return 1
         # Use official OpenSSL source
-        Download_Files https://www.openssl.org/source/old/1.1.1/${Openssl_Ver}.tar.gz ${Openssl_Ver}.tar.gz
-        if [ $? -ne 0 ]; then
-            Download_Files ${Download_Mirror}/lib/openssl/${Openssl_Ver}.tar.gz ${Openssl_Ver}.tar.gz
+        if ! Download_Files "https://www.openssl.org/source/old/1.0.2/${Openssl_Ver}.tar.gz" "${Openssl_Ver}.tar.gz"; then
+            Download_Files "${University_Mirror}/openssl/source/old/1.0.2/${Openssl_Ver}.tar.gz" "${Openssl_Ver}.tar.gz" || return 1
         fi
-        [[ -d "${Openssl_Ver}" ]] && rm -rf ${Openssl_Ver}
-        Tar_Cd ${Openssl_Ver}.tar.gz ${Openssl_Ver}
-        ./config -fPIC --prefix=/usr/local/openssl --openssldir=/usr/local/openssl
-        make depend
-        Make_Install
-        cd ${cur_dir}/src/
-        rm -rf ${cur_dir}/src/${Openssl_Ver}
+        [[ -d "${Openssl_Ver}" ]] && rm -rf -- "${Openssl_Ver}"
+        Tar_Cd "${Openssl_Ver}.tar.gz" "${Openssl_Ver}" || return 1
+        ./config -fPIC --prefix=/usr/local/openssl --openssldir=/usr/local/openssl || return 1
+        make depend || return 1
+        Make_Install || return 1
+        cd "${cur_dir}/src/" || return 1
+        rm -rf -- "${cur_dir}/src/${Openssl_Ver}"
     fi
 }
 
@@ -832,21 +866,20 @@ Install_Openssl_New()
     if openssl version | grep -vEqi "OpenSSL 1.1.1*"; then
         if [ ! -s /usr/local/openssl1.1.1/bin/openssl ] || /usr/local/openssl1.1.1/bin/openssl version | grep -v 'OpenSSL 1.1.1'; then
             Echo_Blue "[+] Installing ${Openssl_New_Ver}"
-            cd ${cur_dir}/src
+            cd "${cur_dir}/src" || return 1
             # Use official OpenSSL source
-            Download_Files https://www.openssl.org/source/old/1.1.1/${Openssl_New_Ver}.tar.gz ${Openssl_New_Ver}.tar.gz
-            if [ $? -ne 0 ]; then
-                Download_Files ${Download_Mirror}/lib/openssl/${Openssl_New_Ver}.tar.gz ${Openssl_New_Ver}.tar.gz
+            if ! Download_Files "https://www.openssl.org/source/old/1.1.1/${Openssl_New_Ver}.tar.gz" "${Openssl_New_Ver}.tar.gz"; then
+                Download_Files "${University_Mirror}/openssl/source/old/1.1.1/${Openssl_New_Ver}.tar.gz" "${Openssl_New_Ver}.tar.gz" || return 1
             fi
-            [[ -d "${Openssl_New_Ver}" ]] && rm -rf ${Openssl_New_Ver}
-            Tar_Cd ${Openssl_New_Ver}.tar.gz ${Openssl_New_Ver}
-            ./config -fPIC --prefix=/usr/local/openssl1.1.1 --openssldir=/usr/local/openssl1.1.1
-            make depend
-            Make_Install
-            ln -sf /usr/local/openssl1.1.1/lib/libcrypto.so.1.1 /usr/lib/
-            ln -sf /usr/local/openssl1.1.1/lib/libssl.so.1.1 /usr/lib/
-            cd ${cur_dir}/src/
-            rm -rf ${cur_dir}/src/${Openssl_New_Ver}
+            [[ -d "${Openssl_New_Ver}" ]] && rm -rf -- "${Openssl_New_Ver}"
+            Tar_Cd "${Openssl_New_Ver}.tar.gz" "${Openssl_New_Ver}" || return 1
+            ./config -fPIC --prefix=/usr/local/openssl1.1.1 --openssldir=/usr/local/openssl1.1.1 || return 1
+            make depend || return 1
+            Make_Install || return 1
+            ln -sf /usr/local/openssl1.1.1/lib/libcrypto.so.1.1 /usr/lib/ || return 1
+            ln -sf /usr/local/openssl1.1.1/lib/libssl.so.1.1 /usr/lib/ || return 1
+            cd "${cur_dir}/src/" || return 1
+            rm -rf -- "${cur_dir}/src/${Openssl_New_Ver}"
         fi
         ldconfig
         apache_with_ssl='--with-ssl=/usr/local/openssl1.1.1'
@@ -859,14 +892,14 @@ Install_Nghttp2()
 {
     if [[ ! -s /usr/local/nghttp2/lib/libnghttp2.so || ! -s /usr/local/nghttp2/include/nghttp2/nghttp2.h ]]; then
         Echo_Blue "[+] Installing ${Nghttp2_Ver}"
-        cd ${cur_dir}/src
-        Download_Files ${Download_Mirror}/lib/nghttp2/${Nghttp2_Ver}.tar.xz ${Nghttp2_Ver}.tar.xz
-        [[ -d "${Nghttp2_Ver}" ]] && rm -rf ${Nghttp2_Ver}
-        Tar_Cd ${Nghttp2_Ver}.tar.xz ${Nghttp2_Ver}
-        ./configure --prefix=/usr/local/nghttp2
-        Make_Install
-        cd ${cur_dir}/src/
-        rm -rf ${cur_dir}/src/${Nghttp2_Ver}
+        cd "${cur_dir}/src" || return 1
+        Download_Files "https://github.com/nghttp2/nghttp2/releases/download/v${Nghttp2_Ver#nghttp2-}/${Nghttp2_Ver}.tar.xz" "${Nghttp2_Ver}.tar.xz" || return 1
+        [[ -d "${Nghttp2_Ver}" ]] && rm -rf -- "${Nghttp2_Ver}"
+        Tar_Cd "${Nghttp2_Ver}.tar.xz" "${Nghttp2_Ver}" || return 1
+        ./configure --prefix=/usr/local/nghttp2 || return 1
+        Make_Install || return 1
+        cd "${cur_dir}/src/" || return 1
+        rm -rf -- "${cur_dir}/src/${Nghttp2_Ver}"
     fi
 }
 
@@ -875,16 +908,16 @@ Install_Libzip()
     if echo "${CentOS_Version}" | grep -Eqi "^7"  || echo "${RHEL_Version}" | grep -Eqi "^7"  || echo "${Aliyun_Version}" | grep -Eqi "^2" || echo "${Alibaba_Version}" | grep -Eqi "^2" || echo "${Oracle_Version}" | grep -Eqi "^7" || echo "${Anolis_Version}" | grep -Eqi "^7"; then
         if [ ! -s /usr/local/lib/libzip.so ]; then
             Echo_Blue "[+] Installing ${Libzip_Ver}"
-            cd ${cur_dir}/src
-            Download_Files ${Download_Mirror}/lib/libzip/${Libzip_Ver}.tar.xz ${Libzip_Ver}.tar.xz
-            Tar_Cd ${Libzip_Ver}.tar.xz ${Libzip_Ver}
-            ./configure
-            Make_Install
-            cd ${cur_dir}/src/
-            rm -rf ${cur_dir}/src/${Libzip_Ver}
+            cd "${cur_dir}/src" || return 1
+            Download_Files "https://libzip.org/download/${Libzip_Ver}.tar.xz" "${Libzip_Ver}.tar.xz" || return 1
+            Tar_Cd "${Libzip_Ver}.tar.xz" "${Libzip_Ver}" || return 1
+            ./configure || return 1
+            Make_Install || return 1
+            cd "${cur_dir}/src/" || return 1
+            rm -rf -- "${cur_dir}/src/${Libzip_Ver}"
         fi
-        export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
-        ldconfig
+        export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}
+        ldconfig || return 1
     fi
 }
 

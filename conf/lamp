@@ -1,5 +1,6 @@
 #!/bin/bash
 export PATH=$PATH:/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
+umask 077
 
 # Check if user is root
 if [ $(id -u) != "0" ]; then
@@ -19,6 +20,53 @@ echo "+-------------------------------------------+"
 
 arg1=$1
 arg2=$2
+
+MYSQL_OPTIONS_FILE=""
+Manager_Cleanup()
+{
+    if [ -n "${MYSQL_OPTIONS_FILE}" ]; then
+        rm -f -- "${MYSQL_OPTIONS_FILE}"
+        MYSQL_OPTIONS_FILE=""
+    fi
+}
+trap Manager_Cleanup EXIT
+
+Escape_SQL_String()
+{
+    local value="$1"
+    value="${value//\\/\\\\}"
+    value="${value//\'/\'\'}"
+    printf '%s' "${value}"
+}
+
+Escape_SQL_Identifier()
+{
+    local value="$1"
+    value="${value//\`/\`\`}"
+    printf '%s' "${value}"
+}
+
+Run_PureFTP_With_Password()
+{
+    local password="$1"
+    shift
+    local password_file status
+
+    [ "$#" -gt 0 ] || return 2
+    password_file=$(mktemp "${TMPDIR:-/tmp}/lnmp-manager-ftp.XXXXXX") || return 1
+    printf '%s\n%s\n' "${password}" "${password}" >"${password_file}" || {
+        rm -f -- "${password_file}"
+        return 1
+    }
+    chmod 600 "${password_file}" || {
+        rm -f -- "${password_file}"
+        return 1
+    }
+    "$@" <"${password_file}"
+    status=$?
+    rm -f -- "${password_file}"
+    return "${status}"
+}
 
 Install_Acme_Release()
 {
@@ -84,9 +132,8 @@ lamp_reload()
 
 lamp_kill()
 {
-    echo "Kill apache,mysql process..."
-    killall httpd
-    killall mysqld
+    echo "Stopping LAMP through the configured service managers..."
+    lamp_stop
     echo "done."
 }
 
@@ -331,14 +378,14 @@ Add_VHost()
     fi
     if [ "${create_database}" == "y" ]; then
         echo "Database username: ${database_name}"
-        echo "Database userpassword: ${mysql_password}"
+        echo "Database password: configured (not displayed)"
         echo "Database Name: ${database_name}"
     else
         echo "Create database: no"
     fi
     if [ "${create_ftp}" == "y" ]; then
         echo "FTP account name: ${ftp_account_name}"
-        echo "FTP account password: ${ftp_account_password}"
+        echo "FTP account password: configured (not displayed)"
     else
         echo "Create ftp account: no"
     fi
@@ -409,12 +456,19 @@ Check_DB()
 
 Make_TempMycnf()
 {
-    cat >~/.my.cnf<<EOF
-[client]
-user=root
-password='$1'
-EOF
-    chmod 600 ~/.my.cnf
+    local escaped_password
+    escaped_password="${1//\\/\\\\}"
+    escaped_password="${escaped_password//\"/\\\"}"
+    Manager_Cleanup
+    MYSQL_OPTIONS_FILE=$(mktemp "${TMPDIR:-/tmp}/lnmp-manager-mysql.XXXXXX") || return 1
+    printf '[client]\nuser=root\npassword="%s"\n' "${escaped_password}" >"${MYSQL_OPTIONS_FILE}" || {
+        Manager_Cleanup
+        return 1
+    }
+    chmod 600 "${MYSQL_OPTIONS_FILE}" || {
+        Manager_Cleanup
+        return 1
+    }
 }
 
 Verify_DB_Password()
@@ -423,9 +477,13 @@ Verify_DB_Password()
     status=1
     while [ $status -eq 1 ]; do
         Echo_Yellow "Enter current root password of Database (Password will not shown): "
-        read -s DB_Root_Password
+        if ! read -r -s DB_Root_Password; then
+            echo
+            echo "Error: input stream closed." >&2
+            return 1
+        fi
         echo
-        Make_TempMycnf "${DB_Root_Password}"
+        Make_TempMycnf "${DB_Root_Password}" || return 1
         Do_Query ""
         status=$?
     done
@@ -434,28 +492,24 @@ Verify_DB_Password()
 
 Do_Query()
 {
-    echo "$1" >/tmp/.mysql.tmp
-    chmod 600 /tmp/.mysql.tmp
+    if [ -z "${MYSQL_OPTIONS_FILE}" ] || [ ! -f "${MYSQL_OPTIONS_FILE}" ]; then
+        echo "Database credentials are not initialized." >&2
+        return 1
+    fi
     Check_DB
-    ${MySQL_Bin} --defaults-file=~/.my.cnf </tmp/.mysql.tmp
-    return $?
+    printf '%s\n' "$1" | "${MySQL_Bin}" "--defaults-file=${MYSQL_OPTIONS_FILE}"
 }
 
 TempMycnf_Clean()
 {
-    if [ -s ~/.my.cnf ]; then
-        rm -f ~/.my.cnf
-    fi
-    if [ -s /tmp/.mysql.tmp ]; then
-        rm -f /tmp/.mysql.tmp
-    fi
+    Manager_Cleanup
 }
 
 Enter_Database_Name()
 {
     while :;do
         Echo_Yellow "Enter database name: "
-        read database_name
+        read -r database_name
         if [ "${database_name}" == "" ]; then
             Echo_Red "Database Name can't be empty!"
         else
@@ -469,45 +523,41 @@ Add_Database_Menu()
     Enter_Database_Name
     echo "Your will create a database and MySQL user with same name: ${database_name}"
     Echo_Yellow "Please enter password for mysql user ${database_name}: "
-    read mysql_password
-    echo "Your password: ${mysql_password} "
+    read -r -s mysql_password
+    echo
 }
 
 Add_Database()
 {
-    if echo "${MySQL_Ver}" | grep -Eqi '^8.0.';then
-        cat >/tmp/.add_mysql.sql<<EOF
-CREATE USER '${database_name}'@'localhost' IDENTIFIED BY '${mysql_password}';
-CREATE USER '${database_name}'@'127.0.0.1' IDENTIFIED BY '${mysql_password}';
-GRANT USAGE ON *.* TO '${database_name}'@'localhost';
-GRANT USAGE ON *.* TO '${database_name}'@'127.0.0.1';
-CREATE DATABASE IF NOT EXISTS \`${database_name}\`;
-GRANT ALL PRIVILEGES ON \`${database_name}\`.* TO '${database_name}'@'localhost';
-GRANT ALL PRIVILEGES ON \`${database_name}\`.* TO '${database_name}'@'127.0.0.1';
-FLUSH PRIVILEGES;
-EOF
-
+    local database_sql database_identifier password_sql
+    database_sql=$(Escape_SQL_String "${database_name}")
+    database_identifier=$(Escape_SQL_Identifier "${database_name}")
+    password_sql=$(Escape_SQL_String "${mysql_password}")
+    if echo "${MySQL_Ver}" | grep -Eqi '^(8|9)\.'; then
+        Do_Query "CREATE USER '${database_sql}'@'localhost' IDENTIFIED BY '${password_sql}';
+CREATE USER '${database_sql}'@'127.0.0.1' IDENTIFIED BY '${password_sql}';
+GRANT USAGE ON *.* TO '${database_sql}'@'localhost';
+GRANT USAGE ON *.* TO '${database_sql}'@'127.0.0.1';
+CREATE DATABASE IF NOT EXISTS \`${database_identifier}\`;
+GRANT ALL PRIVILEGES ON \`${database_identifier}\`.* TO '${database_sql}'@'localhost';
+GRANT ALL PRIVILEGES ON \`${database_identifier}\`.* TO '${database_sql}'@'127.0.0.1';
+FLUSH PRIVILEGES;"
     else
-        cat >/tmp/.add_mysql.sql<<EOF
-CREATE USER '${database_name}'@'localhost' IDENTIFIED BY '${mysql_password}';
-CREATE USER '${database_name}'@'127.0.0.1' IDENTIFIED BY '${mysql_password}';
-GRANT USAGE ON *.* TO '${database_name}'@'localhost' IDENTIFIED BY '${mysql_password}';
-GRANT USAGE ON *.* TO '${database_name}'@'127.0.0.1' IDENTIFIED BY '${mysql_password}';
-CREATE DATABASE IF NOT EXISTS \`${database_name}\`;
-GRANT ALL PRIVILEGES ON \`${database_name}\`.* TO '${database_name}'@'localhost';
-GRANT ALL PRIVILEGES ON \`${database_name}\`.* TO '${database_name}'@'127.0.0.1';
-FLUSH PRIVILEGES;
-EOF
-
+        Do_Query "CREATE USER '${database_sql}'@'localhost' IDENTIFIED BY '${password_sql}';
+CREATE USER '${database_sql}'@'127.0.0.1' IDENTIFIED BY '${password_sql}';
+GRANT USAGE ON *.* TO '${database_sql}'@'localhost' IDENTIFIED BY '${password_sql}';
+GRANT USAGE ON *.* TO '${database_sql}'@'127.0.0.1' IDENTIFIED BY '${password_sql}';
+CREATE DATABASE IF NOT EXISTS \`${database_identifier}\`;
+GRANT ALL PRIVILEGES ON \`${database_identifier}\`.* TO '${database_sql}'@'localhost';
+GRANT ALL PRIVILEGES ON \`${database_identifier}\`.* TO '${database_sql}'@'127.0.0.1';
+FLUSH PRIVILEGES;"
     fi
-    ${MySQL_Bin} --defaults-file=~/.my.cnf < /tmp/.add_mysql.sql
     [ $? -eq 0 ] && echo "Add database Sucessfully." || echo "Add database failed!"
-    rm -f /tmp/.add_mysql.sql
 }
 
 List_Database()
 {
-    ${MySQL_Bin} --defaults-file=~/.my.cnf -e "SHOW DATABASES;"
+    Do_Query "SHOW DATABASES;"
     [ $? -eq 0 ] && echo "List all databases Sucessfully." || echo "List all databases failed!"
 }
 
@@ -515,7 +565,7 @@ Edit_Database()
 {
     while :;do
         Echo_Yellow "Enter database username: "
-        read database_username
+        read -r database_username
         if [ "${database_username}" == "" ]; then
             Echo_Red "Database Username can't be empty!"
         else
@@ -524,7 +574,8 @@ Edit_Database()
     done
     while :;do
         Echo_Yellow "Enter NEW Password: "
-        read database_username_passwd
+        read -r -s database_username_passwd
+        echo
         if [ "${database_username_passwd}" == "" ]; then
             Echo_Red "Database Password can't be empty!"
         else
@@ -532,13 +583,16 @@ Edit_Database()
         fi
     done
 
-    if echo "${MySQL_Ver}" | grep -Eqi '^5.7.';then
-        Do_Query "UPDATE mysql.user SET authentication_string=PASSWORD('${database_username_passwd}') WHERE User='${database_username}' AND Host IN ('localhost', '127.0.0.1', '::1');"
-    elif echo "${MySQL_Ver}" | grep -Eqi '^8.0.';then
-        Do_Query "SET PASSWORD FOR '${database_username}'@'127.0.0.1' = '${database_username_passwd}';"
-        Do_Query "SET PASSWORD FOR '${database_username}'@'localhost' = '${database_username_passwd}';"
+    local username_sql password_sql
+    username_sql=$(Escape_SQL_String "${database_username}")
+    password_sql=$(Escape_SQL_String "${database_username_passwd}")
+    if echo "${MySQL_Ver}" | grep -Eqi '^5\.7\.'; then
+        Do_Query "UPDATE mysql.user SET authentication_string=PASSWORD('${password_sql}') WHERE User='${username_sql}' AND Host IN ('localhost', '127.0.0.1', '::1');"
+    elif echo "${MySQL_Ver}" | grep -Eqi '^(8|9)\.'; then
+        Do_Query "SET PASSWORD FOR '${username_sql}'@'127.0.0.1' = '${password_sql}';
+SET PASSWORD FOR '${username_sql}'@'localhost' = '${password_sql}';"
     else
-        Do_Query "UPDATE mysql.user SET Password=PASSWORD('${database_username_passwd}') WHERE User='${database_username}' AND Host IN ('localhost', '127.0.0.1', '::1');"
+        Do_Query "UPDATE mysql.user SET Password=PASSWORD('${password_sql}') WHERE User='${username_sql}' AND Host IN ('localhost', '127.0.0.1', '::1');"
     fi
     [ $? -eq 0 ] && echo "Edit user password Sucessfully." || echo "Edit user password databases failed!"
     Do_Query "FLUSH PRIVILEGES;"
@@ -555,15 +609,14 @@ Del_Database()
     echo "Your will delete database and MySQL user with same name: ${database_name}"
     echo "Sleep 10s, Press ctrl+c to cancel..."
     Sleep_Sec 10
-    cat >/tmp/.del.mysql.sql<<EOF
-DROP USER '${database_name}'@'127.0.0.1';
-DROP USER '${database_name}'@'localhost';
-DROP DATABASE \`${database_name}\`;
-FLUSH PRIVILEGES;
-EOF
-    ${MySQL_Bin} --defaults-file=~/.my.cnf < /tmp/.del.mysql.sql
+    local database_sql database_identifier
+    database_sql=$(Escape_SQL_String "${database_name}")
+    database_identifier=$(Escape_SQL_Identifier "${database_name}")
+    Do_Query "DROP USER '${database_sql}'@'127.0.0.1';
+DROP USER '${database_sql}'@'localhost';
+DROP DATABASE \`${database_identifier}\`;
+FLUSH PRIVILEGES;"
     [ $? -eq 0 ] && echo "Delete database: ${database_name} Sucessfully." || echo "Delete database: ${database_name} failed!"
-    rm -f /tmp/.del.mysql.sql
 }
 
 Enter_Ftp_Name()
@@ -584,7 +637,8 @@ Add_Ftp_Menu()
     Enter_Ftp_Name
     while :;do
         Echo_Yellow "Enter password for ftp account ${ftp_account_name}: "
-        read ftp_account_password
+        read -r -s ftp_account_password
+        echo
         if [ "${ftp_account_password}" == "" ]; then
             Echo_Red "FTP password can't be empty!"
         else
@@ -620,13 +674,8 @@ Add_Ftp()
         mkdir -p ${vhostdir}
         chown www:www -R ${vhostdir}
     fi
-    cat >/tmp/pass${ftp_account_name}<<EOF
-${ftp_account_password}
-${ftp_account_password}
-EOF
-    /usr/local/pureftpd/bin/pure-pw useradd ${ftp_account_name} -f /usr/local/pureftpd/etc/pureftpd.passwd -u ${www_uid} -g ${www_gid} -d ${vhostdir} -m < /tmp/pass${ftp_account_name}
+    Run_PureFTP_With_Password "${ftp_account_password}" /usr/local/pureftpd/bin/pure-pw useradd "${ftp_account_name}" -f /usr/local/pureftpd/etc/pureftpd.passwd -u "${www_uid}" -g "${www_gid}" -d "${vhostdir}" -m
     [ $? -eq 0 ] && echo "Created FTP User: ${ftp_account_name} Sucessfully." || echo "FTP User: ${ftp_account_name} already exists!"
-    rm -f /tmp/pass${ftp_account_name}
 }
 
 List_Ftp()
@@ -640,15 +689,11 @@ Edit_Ftp()
     List_Ftp
     Enter_Ftp_Name
     Echo_Yellow "Enter password for ftp account ${ftp_account_name}: "
-    read ftp_account_password
+    read -r -s ftp_account_password
+    echo
     if [ "${ftp_account_password}" != "" ]; then
-        cat >/tmp/pass${ftp_account_name}<<EOF
-${ftp_account_password}
-${ftp_account_password}
-EOF
-        /usr/local/pureftpd/bin/pure-pw passwd ${ftp_account_name} -f /usr/local/pureftpd/etc/pureftpd.passwd -m < /tmp/pass${ftp_account_name}
+        Run_PureFTP_With_Password "${ftp_account_password}" /usr/local/pureftpd/bin/pure-pw passwd "${ftp_account_name}" -f /usr/local/pureftpd/etc/pureftpd.passwd -m
         [ $? -eq 0 ] && echo "FTP User: ${ftp_account_name} change password Sucessfully." || echo "FTP User: ${ftp_account_name} change password failed!"
-        rm -f /tmp/pass${ftp_account_name}
     else
         echo "FTP password will not change."
     fi
