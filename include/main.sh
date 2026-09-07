@@ -1096,13 +1096,13 @@ Validate_Archive_Entries()
     ListFile=$(mktemp "${TMPDIR:-/tmp}/lnmp-archive.XXXXXX") || return 1
     case "${extension}" in
         gz|tgz)
-            tar --list --gzip --file "${FileName}" > "${ListFile}"
+            LC_ALL=C tar --list --gzip --file "${FileName}" > "${ListFile}"
             ;;
         bz2)
-            tar --list --bzip2 --file "${FileName}" > "${ListFile}"
+            LC_ALL=C tar --list --bzip2 --file "${FileName}" > "${ListFile}"
             ;;
         xz)
-            tar --list --xz --file "${FileName}" > "${ListFile}"
+            LC_ALL=C tar --list --xz --file "${FileName}" > "${ListFile}"
             ;;
         *)
             rm -f -- "${ListFile}"
@@ -1129,13 +1129,13 @@ Validate_Archive_Entries()
         }
         case "${extension}" in
             gz|tgz)
-                tar --list --verbose --gzip --file "${FileName}" > "${MetadataFile}"
+                LC_ALL=C tar --list --verbose --gzip --file "${FileName}" > "${MetadataFile}"
                 ;;
             bz2)
-                tar --list --verbose --bzip2 --file "${FileName}" > "${MetadataFile}"
+                LC_ALL=C tar --list --verbose --bzip2 --file "${FileName}" > "${MetadataFile}"
                 ;;
             xz)
-                tar --list --verbose --xz --file "${FileName}" > "${MetadataFile}"
+                LC_ALL=C tar --list --verbose --xz --file "${FileName}" > "${MetadataFile}"
                 ;;
         esac
         if [ "$?" -ne 0 ]; then
@@ -1143,7 +1143,42 @@ Validate_Archive_Entries()
             Echo_Red "Archive metadata listing failed: ${FileName}"
             return 1
         fi
-        if awk '$1 !~ /^[d-]/ { print "archive special files or links are not allowed: " $0 > "/dev/stderr"; bad = 1 } END { exit bad }' "${MetadataFile}"; then
+        if awk '
+            function unsafe_path(path) {
+                return path ~ /^\// || path ~ /(^|\/)\.\.(\/|$)/
+            }
+            $1 !~ /^[dhl-]/ {
+                print "archive special files are not allowed: " $0 > "/dev/stderr"
+                bad = 1
+            }
+            $1 ~ /^l/ {
+                marker = index($0, " -> ")
+                if (marker == 0) {
+                    print "archive symbolic-link metadata is invalid: " $0 > "/dev/stderr"
+                    bad = 1
+                } else {
+                    target = substr($0, marker + 4)
+                    if (unsafe_path(target)) {
+                        print "unsafe archive link target: " target > "/dev/stderr"
+                        bad = 1
+                    }
+                }
+            }
+            $1 ~ /^h/ {
+                marker = index($0, " link to ")
+                if (marker == 0) {
+                    print "archive hard-link metadata is invalid: " $0 > "/dev/stderr"
+                    bad = 1
+                } else {
+                    target = substr($0, marker + 9)
+                    if (unsafe_path(target)) {
+                        print "unsafe archive link target: " target > "/dev/stderr"
+                        bad = 1
+                    }
+                }
+            }
+            END { exit bad }
+        ' "${MetadataFile}"; then
             rm -f -- "${ListFile}" "${MetadataFile}"
             return 0
         fi
