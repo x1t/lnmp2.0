@@ -539,6 +539,19 @@ Multiple_PHP_Select()
     fi
 }
 
+Prepare_Acme_Webroot()
+{
+    local webroot="${1:-}"
+    if [ -z "${webroot}" ]; then
+        return 1
+    fi
+    if [[ "${webroot}" == /home/wwwroot/* ]]; then
+        chmod 0711 /home/wwwroot || return 1
+    fi
+    mkdir -p -- "${webroot}/.well-known/acme-challenge" || return 1
+    chmod 0755 -- "${webroot}" "${webroot}/.well-known" "${webroot}/.well-known/acme-challenge" || return 1
+}
+
 Add_VHost()
 {
     domain=""
@@ -658,7 +671,7 @@ Add_VHost()
     stty ${OLDCONFIG}
 
     echo "Create Virtul Host directory......"
-    mkdir -p ${vhostdir}
+    Prepare_Acme_Webroot "${vhostdir}" || exit 1
     if [ "${access_log}" == "y" ]; then
         touch /home/wwwlogs/${al_name}.log
     fi
@@ -685,7 +698,7 @@ EOF
     fi
 
     if [ "${create_ssl}" == "y" ]; then
-        Add_SSL
+        Add_SSL || exit 1
     fi
 
     Echo_Green "================================================"
@@ -1390,11 +1403,9 @@ Add_SSL()
         else
             letsdomain="-d ${domain}"
         fi
+        Prepare_Acme_Webroot "${vhostdir}" || exit 1
         if [ ! -s "/usr/local/nginx/conf/vhost/${domain}.conf" ]; then
             Add_VHost_Config
-        fi
-        if [ ! -d "${vhostdir}" ]; then
-            mkdir -p "${vhostdir}"
         fi
 
         if [[ "${vhostdir}" == "" || "${letsdomain}" == "" ]]; then
@@ -1415,13 +1426,13 @@ Add_SSL()
 
         if [ "${ssl_choice}" == "2" ]; then
             echo "Generate ssl certificate using Let's Encrypt..."
-            /usr/local/acme.sh/acme.sh ${acme_sh_sudo} --server letsencrypt --issue ${letsdomain} -w ${vhostdir} -k 2048 --reloadcmd "/etc/init.d/nginx reload"
+            (umask 022; /usr/local/acme.sh/acme.sh ${acme_sh_sudo} --server letsencrypt --issue ${letsdomain} -w ${vhostdir} -k 2048 --reloadcmd "/etc/init.d/nginx reload")
         elif [ "${ssl_choice}" == "3" ]; then
             echo "Generate ssl certificate using BuyPass..."
-            /usr/local/acme.sh/acme.sh ${acme_sh_sudo} --server buypass --issue ${letsdomain} -w ${vhostdir} -k 2048 --days 170 --reloadcmd "/etc/init.d/nginx reload"
+            (umask 022; /usr/local/acme.sh/acme.sh ${acme_sh_sudo} --server buypass --issue ${letsdomain} -w ${vhostdir} -k 2048 --days 170 --reloadcmd "/etc/init.d/nginx reload")
         elif [ "${ssl_choice}" == "4" ]; then
             echo "Generate ssl certificate using ZeroSSL..."
-            /usr/local/acme.sh/acme.sh ${acme_sh_sudo} --server zerossl --issue ${letsdomain} -w ${vhostdir} -k 2048 --reloadcmd "/etc/init.d/nginx reload"
+            (umask 022; /usr/local/acme.sh/acme.sh ${acme_sh_sudo} --server zerossl --issue ${letsdomain} -w ${vhostdir} -k 2048 --reloadcmd "/etc/init.d/nginx reload")
         fi
         lets_status=$?
 
@@ -1432,6 +1443,7 @@ Add_SSL()
             Echo_Green " Generate SSL Certificate successfully."
         else
             Echo_Red " Generate SSL Certificate failed!"
+            return 1
         fi
     fi
 }

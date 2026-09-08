@@ -7,6 +7,9 @@ Install_Apache_22()
         getent group www >/dev/null 2>&1 || groupadd www || return 1
         id www >/dev/null 2>&1 || useradd -s /sbin/nologin -g www www || return 1
         mkdir -p -- "${Default_Website_Dir}" /home/wwwlogs || return 1
+        if [[ "${Default_Website_Dir}" == /home/wwwroot/* ]]; then
+            chmod 0711 /home/wwwroot || return 1
+        fi
         chmod 0750 -- "${Default_Website_Dir}" /home/wwwlogs || return 1
         chown -R www:www -- "${Default_Website_Dir}" /home/wwwlogs || return 1
     fi
@@ -63,6 +66,9 @@ Install_Apache_24()
         getent group www >/dev/null 2>&1 || groupadd www || return 1
         id www >/dev/null 2>&1 || useradd -s /sbin/nologin -g www www || return 1
         mkdir -p -- "${Default_Website_Dir}" /home/wwwlogs || return 1
+        if [[ "${Default_Website_Dir}" == /home/wwwroot/* ]]; then
+            chmod 0711 /home/wwwroot || return 1
+        fi
         chmod 0750 -- "${Default_Website_Dir}" /home/wwwlogs || return 1
         chown -R www:www -- "${Default_Website_Dir}" /home/wwwlogs || return 1
         Install_Openssl_New

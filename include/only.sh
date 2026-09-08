@@ -58,6 +58,8 @@ Install_Only_Nginx()
     StartOrStop start nginx || return 1
     Add_Iptables_Rules || return 1
     \cp "${cur_dir}/conf/index.html" "${Default_Website_Dir}/index.html" || return 1
+    chown www:www "${Default_Website_Dir}/index.html" || return 1
+    chmod 0644 "${Default_Website_Dir}/index.html" || return 1
     \cp "${cur_dir}/conf/lnmp" /bin/lnmp || return 1
     Check_Nginx_Files || return 1
 }
