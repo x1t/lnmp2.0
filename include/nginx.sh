@@ -163,6 +163,9 @@ Install_Nginx()
 
     mkdir -p "${Default_Website_Dir}" || return 1
     chmod +w "${Default_Website_Dir}" || return 1
+    if [[ "${Default_Website_Dir}" == /home/wwwroot/* ]]; then
+        chmod 0711 /home/wwwroot || return 1
+    fi
     mkdir -p /home/wwwlogs || return 1
     chmod 777 /home/wwwlogs || return 1
 

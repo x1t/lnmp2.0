@@ -931,6 +931,8 @@ eof
 
     \cp "${cur_dir}/conf/index.html" "${Default_Website_Dir}/index.html" || return 1
     \cp "${cur_dir}/conf/lnmp.gif" "${Default_Website_Dir}/lnmp.gif" || return 1
+    chown www:www "${Default_Website_Dir}/phpinfo.php" "${Default_Website_Dir}/index.html" "${Default_Website_Dir}/lnmp.gif" || return 1
+    chmod 644 "${Default_Website_Dir}/phpinfo.php" "${Default_Website_Dir}/index.html" "${Default_Website_Dir}/lnmp.gif" || return 1
 
     echo "============================Install PHPMyAdmin================================="
     cd "${cur_dir}/src" || return 1
