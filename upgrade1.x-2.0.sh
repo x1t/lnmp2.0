@@ -18,6 +18,19 @@ isSSL=$1
 . include/main.sh
 . include/init.sh
 
+Prepare_Acme_Webroot()
+{
+    local webroot="${1:-}"
+    if [ -z "${webroot}" ]; then
+        return 1
+    fi
+    if [[ "${webroot}" == /home/wwwroot/* ]]; then
+        chmod 0711 /home/wwwroot || return 1
+    fi
+    mkdir -p -- "${webroot}/.well-known/acme-challenge" || return 1
+    chmod 0755 -- "${webroot}" "${webroot}/.well-known" "${webroot}/.well-known/acme-challenge" || return 1
+}
+
 Get_Dist_Name
 Check_Stack
 Check_DB
@@ -206,7 +219,8 @@ if [ "${isSSL}" == "ssl" ]; then
         fi
 
         echo "Starting create SSL Certificate use Let's Encrypt..."
-        /usr/local/acme.sh/acme.sh --server letsencrypt --issue ${letsdomain} -w ${vhostdir} -k 2048 --reloadcmd "/etc/init.d/nginx reload"
+        Prepare_Acme_Webroot "${vhostdir}" || exit 1
+        (umask 022; /usr/local/acme.sh/acme.sh --server letsencrypt --issue ${letsdomain} -w ${vhostdir} -k 2048 --reloadcmd "/etc/init.d/nginx reload")
         lets_status=$?
         if [ "${lets_status}" = 0 ]; then
             Echo_Green "Let's Encrypt SSL Certificate create successfully."
@@ -326,7 +340,8 @@ if [ "${isSSL}" == "ssl" ]; then
         fi
 
         echo "Starting create SSL Certificate use Let's Encrypt..."
-        /usr/local/acme.sh/acme.sh --server letsencrypt --issue ${letsdomain} -w ${vhostdir} -k 2048 --reloadcmd "/etc/init.d/httpd graceful"
+        Prepare_Acme_Webroot "${vhostdir}" || exit 1
+        (umask 022; /usr/local/acme.sh/acme.sh --server letsencrypt --issue ${letsdomain} -w ${vhostdir} -k 2048 --reloadcmd "/etc/init.d/httpd graceful")
         lets_status=$?
         if [ "${lets_status}" = 0 ]; then
             Echo_Green "Let's Encrypt SSL Certificate create successfully."
