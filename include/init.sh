@@ -479,8 +479,9 @@ Deb_Dependent()
     fi
     apt-get -fy install || return 1
     export DEBIAN_FRONTEND=noninteractive
-    local package
+    local package tool
     local available_packages=()
+    local runtime_packages=()
     if [ "${DISTRO}" = "Debian" ] && echo "${Debian_Version}" | grep -Eqi "^13"; then
         echo "Detected Debian 13 Trixie, adjusting package names..."
         runtime_packages=(libaio1t64 libncurses-dev libtinfo6)
@@ -489,13 +490,32 @@ Deb_Dependent()
     fi
     local packages=(debian-keyring debian-archive-keyring build-essential gcc g++ make cmake autoconf automake re2c wget cron bzip2 libzip-dev libc6-dev bison file flex m4 gawk less cpp binutils diffutils unzip tar libbz2-dev libtool libevent-dev openssl libssl-dev libsasl2-dev zlib1g zlib1g-dev libbz2-1.0 libglib2.0-0 libglib2.0-dev libjpeg-dev libpng-dev libkrb5-dev curl libcurl4-openssl-dev libpcre3-dev libpq-dev libpq5 gettext libxml2-dev libcap-dev ca-certificates psmisc patch git libc-ares-dev libicu-dev e2fsprogs libxslt1.1 libxslt1-dev xz-utils libexpat1-dev libtirpc-dev libsqlite3-dev libonig-dev lsof pkg-config libnuma-dev libwebp-dev gnutls-dev iproute2 gzip libpcre2-dev libtool-bin libreadline-dev libfcgi-dev libfreetype6-dev libgd-dev libpspell-dev "${runtime_packages[@]}")
     for package in "${packages[@]}"; do
-        if apt-cache policy "${package}" 2>/dev/null | awk '/^Candidate:/ { found = ($2 != "(none)") } END { exit(found ? 0 : 1) }'; then
+        if LC_ALL=C apt-cache policy "${package}" 2>/dev/null | awk '$1 == "Candidate:" { found = ($2 != "(none)" && $2 != "") } END { exit(found ? 0 : 1) }'; then
             available_packages+=("${package}")
+        else
+            case "${package}" in
+                build-essential|gcc|g++|make|libc6-dev|pkg-config)
+                    Echo_Red "Required build dependency has no installation candidate: ${package}. Check your APT repositories."
+                    return 1
+                    ;;
+                *)
+                    echo "Skipping unavailable distribution package: ${package}"
+                    ;;
+            esac
         fi
     done
-    if [ "${#available_packages[@]}" -gt 0 ]; then
-        apt-get --no-install-recommends install -y "${available_packages[@]}" || return 1
+    if [ "${#available_packages[@]}" -eq 0 ]; then
+        Echo_Red "No dependency packages are available. Check your APT repositories."
+        return 1
     fi
+    apt-get --no-install-recommends install -y "${available_packages[@]}" || return 1
+    for tool in gcc g++ make pkg-config; do
+        if ! command -v "${tool}" >/dev/null 2>&1; then
+            Echo_Red "Required build tool is still missing after dependency installation: ${tool}"
+            return 1
+        fi
+    done
+    return 0
 }
 
 Check_Download()
