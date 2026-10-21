@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 DB_Info=('MySQL 5.1.73' 'MySQL 5.5.62' 'MySQL 5.6.51' 'MySQL 5.7.42' 'MySQL 8.0.46' 'MariaDB 5.5.68' 'MariaDB 10.4.29' 'MariaDB 10.5.20' 'MariaDB 10.6.13' 'MariaDB 10.11.3' 'MySQL 8.4.11' 'MySQL 9.7.2')
-PHP_Info=('PHP 7.0.33' 'PHP 7.1.33' 'PHP 7.2.34' 'PHP 7.3.33' 'PHP 7.4.33' 'PHP 8.0.28' 'PHP 8.1.19' 'PHP 8.2.6' 'PHP 8.3.24' 'PHP 8.4.11' 'PHP 8.5.6')
+PHP_Info=('PHP 7.0.33' 'PHP 7.1.33' 'PHP 7.2.34' 'PHP 7.3.33' 'PHP 7.4.33' 'PHP 8.0.28' 'PHP 8.1.19' 'PHP 8.2.35' 'PHP 8.3.36' 'PHP 8.4.27' 'PHP 8.5.12')
 Apache_Info=('Apache 2.2.34' 'Apache 2.4.57')
 
 Is_MySQL_DB()
